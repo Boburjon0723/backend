@@ -2,7 +2,9 @@ import { Pool } from 'pg';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
-dotenv.config({ override: true });
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config({ override: true });
+}
 
 // PostgreSQL Connection
 const pool = new Pool({
