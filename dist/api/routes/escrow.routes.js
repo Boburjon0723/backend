@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const escrow_controller_1 = require("../controllers/escrow.controller");
+const auth_middleware_1 = require("../../middleware/auth.middleware");
+const router = (0, express_1.Router)();
+router.post('/escrow/hold', auth_middleware_1.authenticateToken, escrow_controller_1.holdFunds);
+router.post('/escrow/release', auth_middleware_1.authenticateToken, escrow_controller_1.releaseFunds);
+router.post('/escrow/refund', auth_middleware_1.authenticateToken, escrow_controller_1.refundFunds);
+exports.default = router;
