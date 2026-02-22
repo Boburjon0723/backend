@@ -7,11 +7,13 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // PostgreSQL Connection
+console.log('Database URL check:', process.env.DATABASE_URL ? 'URL exists' : 'URL MISSING');
+const isProduction = process.env.NODE_ENV === 'production';
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('supabase') || process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false
+    ssl: {
+        rejectUnauthorized: false
+    }
 });
 
 // Test connection immediately
