@@ -42,4 +42,6 @@ const connectMongoDB = async () => {
     }
 };
 
-export { pool, connectMongoDB };
+const query = (text: string, params?: any) => pool.query(text, params);
+
+export { pool, query, connectMongoDB };
