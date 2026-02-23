@@ -12,10 +12,15 @@ const server = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(server, {
     cors: {
-        origin: "*", // Productionda xavfsizroq qilish mumkin, hozircha Android va Veb uchun ochiq qoldiramiz
+        origin: "*",
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    // Allow both polling and websocket transports (Railway compatibility)
+    transports: ['polling', 'websocket'],
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000,
 });
 
 // Attach io to app for access in controllers
