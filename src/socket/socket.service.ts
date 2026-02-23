@@ -81,7 +81,11 @@ export class SocketService {
                     console.log(`[Socket] Saved message to Postgres DB:`, savedMessage.id, `Room: ${roomId}`);
 
                     // 2. Broadcast to room (including sender for confirmation)
-                    this.io.to(roomId).emit('receive_message', savedMessage);
+                    // Include roomId explicitly so frontend can match it, since savedMessage has chat_id (snake_case)
+                    this.io.to(roomId).emit('receive_message', {
+                        ...savedMessage,
+                        roomId: roomId,  // Explicit roomId for frontend matching
+                    });
                     console.log(`[Socket] Broadcasted to room: ${roomId}`);
 
                     // 3. Bot Logic check
