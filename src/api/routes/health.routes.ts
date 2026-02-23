@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../../config/database';
-import mongoose from 'mongoose';
 
 const router = Router();
 
@@ -10,7 +9,6 @@ router.get('/health', async (req: Request, res: Response) => {
         message: 'OK',
         timestamp: Date.now(),
         postgres: 'disconnected',
-        mongo: 'disconnected',
     };
 
     try {
@@ -19,17 +17,6 @@ router.get('/health', async (req: Request, res: Response) => {
         healthcheck.postgres = 'connected';
     } catch (error) {
         healthcheck.postgres = 'error';
-    }
-
-    try {
-        // Check Mongo
-        if (mongoose.connection.readyState === 1) {
-            healthcheck.mongo = 'connected';
-        } else {
-            healthcheck.mongo = 'disconnected';
-        }
-    } catch (error) {
-        healthcheck.mongo = 'error';
     }
 
     res.send(healthcheck);

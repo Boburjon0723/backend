@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { MessageModel } from '../models/mongo/Message';
+import { MessageModel } from '../models/postgres/Message';
 import { TokenService } from '../services/token.service';
 import { ServiceModel } from '../models/postgres/Service';
 import { UserModel } from '../models/postgres/User';
@@ -70,19 +70,18 @@ export class SocketService {
                 try {
                     const { roomId, content, type } = data;
 
-                    // 1. Save to MongoDB
-                    const message = new MessageModel({
+                    // 1. Save to Postgres
+                    const savedMessage = await MessageModel.create(
                         roomId,
-                        senderId: authSocket.user.id,
-                        senderName: authSocket.user.name || authSocket.user.email || authSocket.user.phone || "Unknown User",
+                        authSocket.user.id,
                         content,
-                        type: type || 'text'
-                    });
-                    const savedMessage = await message.save();
-                    console.log(`[Socket] Saved message to DB:`, savedMessage._id, `Room: ${roomId}`);
+                        type || 'text',
+                        { senderName: authSocket.user.name || authSocket.user.phone || "Unknown User" }
+                    );
+                    console.log(`[Socket] Saved message to Postgres DB:`, savedMessage.id, `Room: ${roomId}`);
 
                     // 2. Broadcast to room (including sender for confirmation)
-                    this.io.to(roomId).emit('receive_message', message);
+                    this.io.to(roomId).emit('receive_message', savedMessage);
                     console.log(`[Socket] Broadcasted to room: ${roomId}`);
 
                     // 3. Bot Logic check
@@ -208,15 +207,13 @@ export class SocketService {
         }
 
         // Send Bot Response
-        const botMessage = new MessageModel({
+        const botMessage = await MessageModel.create(
             roomId,
-            senderId: 'bot-system', // Special ID
-            senderName: 'MALI Bot',
-            content: responseContent,
-            type: 'system'
-        });
-
-        await botMessage.save();
+            '00000000-0000-0000-0000-000000000000', // System/Bot UUID
+            responseContent,
+            'system',
+            { senderName: 'MALI Bot' }
+        );
 
         // Emit to room (simplest approach for group chat bot)
         this.io.to(roomId).emit('receive_message', botMessage);

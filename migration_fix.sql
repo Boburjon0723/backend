@@ -1,0 +1,181 @@
+-- 1. Users jadvalini yangilash (phone_number -> phone)
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='phone_number') THEN
+        ALTER TABLE users RENAME COLUMN phone_number TO phone;
+    END IF;
+END $$;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(100) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+-- 2. Wallets jadvali
+CREATE TABLE IF NOT EXISTS wallets (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    balance DECIMAL(20, 4) DEFAULT 0.0000,
+    locked DECIMAL(20, 4) DEFAULT 0.0000,
+    pin_hash VARCHAR(255),
+    is_locked BOOLEAN DEFAULT FALSE,
+    recovery_status VARCHAR(50) DEFAULT 'none',
+    recovery_requested_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. User Profiles jadvali
+CREATE TABLE IF NOT EXISTS user_profiles (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    bio TEXT,
+    is_expert BOOLEAN DEFAULT FALSE,
+    profession VARCHAR(255),
+    specialization TEXT,
+    experience_years INTEGER DEFAULT 0,
+    service_price DECIMAL(20, 4) DEFAULT 0,
+    working_hours VARCHAR(255),
+    languages TEXT,
+    rating DECIMAL(3, 2) DEFAULT 0.00,
+    verified_status VARCHAR(50) DEFAULT 'unverified',
+    wiloyat VARCHAR(100),
+    tuman VARCHAR(100),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4. User Contacts jadvali
+CREATE TABLE IF NOT EXISTS user_contacts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    contact_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    custom_name VARCHAR(255),
+    custom_surname VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, contact_user_id)
+);
+
+-- 5. Jobs Table
+CREATE TABLE IF NOT EXISTS jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    price VARCHAR(100),
+    category VARCHAR(100),
+    type VARCHAR(50), 
+    status VARCHAR(50) DEFAULT 'active',
+    contact_phone VARCHAR(20),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. P2P Jadvallari
+CREATE TABLE IF NOT EXISTS p2p_ads (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(10) NOT NULL, -- 'buy', 'sell'
+    amount_mali DECIMAL(20, 4) NOT NULL,
+    price_uzs DECIMAL(20, 4) NOT NULL,
+    min_limit_uzs DECIMAL(20, 4) DEFAULT 0,
+    max_limit_uzs DECIMAL(20, 4) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS p2p_trades (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ad_id UUID REFERENCES p2p_ads(id) ON DELETE CASCADE,
+    buyer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    seller_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    amount_mali DECIMAL(20, 4) NOT NULL,
+    amount_uzs DECIMAL(20, 4) NOT NULL,
+    fee_amount DECIMAL(20, 4) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'completed', 'cancelled'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 7. Topup Requests
+CREATE TABLE IF NOT EXISTS topup_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    amount DECIMAL(20, 4) NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Platform Settings
+CREATE TABLE IF NOT EXISTS platform_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO platform_settings (key, value) VALUES ('transfer_fee_percentage', '0.001') ON CONFLICT (key) DO NOTHING;
+
+-- 9. Chat va Xabarlar
+CREATE TABLE IF NOT EXISTS chats (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    type VARCHAR(50) DEFAULT 'private',
+    name VARCHAR(255),
+    description TEXT,
+    avatar_url TEXT,
+    link VARCHAR(255) UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chat_participants (
+    chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (chat_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    content TEXT NOT NULL,
+    type VARCHAR(50) DEFAULT 'text',
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. Balans va Triggerlar
+CREATE TABLE IF NOT EXISTS platform_balance (
+    id SERIAL PRIMARY KEY,
+    balance DECIMAL(20, 4) DEFAULT 0.0000,
+    total_fees_collected DECIMAL(20, 4) DEFAULT 0.0000,
+    total_commissions_collected DECIMAL(20, 4) DEFAULT 0.0000,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 11. Expenses Table
+CREATE TABLE IF NOT EXISTS expenses (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    amount DECIMAL(15,2) NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT,
+    type TEXT CHECK (type IN ('expense', 'income')) DEFAULT 'expense',
+    date DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO platform_balance (id, balance) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+DROP TRIGGER IF EXISTS update_users_modtime ON users;
+CREATE TRIGGER update_users_modtime BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+DROP TRIGGER IF EXISTS update_wallets_modtime ON wallets;
+CREATE TRIGGER update_wallets_modtime BEFORE UPDATE ON wallets FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+DROP TRIGGER IF EXISTS update_user_profiles_modtime ON user_profiles;
+CREATE TRIGGER update_user_profiles_modtime BEFORE UPDATE ON user_profiles FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+推

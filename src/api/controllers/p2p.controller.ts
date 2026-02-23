@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { pool } from '../../config/database';
-import { ChatModel } from '../../models/mongo/Chat';
+import { ChatModel } from '../../models/postgres/Chat';
 
 export const getTradeDetails = async (req: Request, res: Response) => {
     const { tradeId } = req.params;
@@ -17,7 +17,8 @@ export const getTradeDetails = async (req: Request, res: Response) => {
 export const getTradeChat = async (req: Request, res: Response) => {
     const { tradeId } = req.params;
     try {
-        const chat = await ChatModel.findOne({ tradeId, isTrade: true });
+        const result = await pool.query('SELECT * FROM chats WHERE link = $1', [`trade_${tradeId}`]);
+        const chat = result.rows[0];
         if (!chat) return res.status(404).json({ message: 'Trade chat not found' });
         res.json(chat);
     } catch (error) {
@@ -146,20 +147,29 @@ export const initiateTrade = async (req: Request, res: Response) => {
 
         const trade = tradeRes.rows[0];
 
-        // Create Anonymous Trade Chat
+        // Create Anonymous Trade Chat in Postgres
         try {
-            await ChatModel.create({
-                participants: [buyerId, sellerId],
-                type: 'private',
-                isTrade: true,
-                tradeId: trade.id,
-                lastMessage: 'Yangi savdo boshlandi. Xaridor va Sotuvchi muloqot qilishi mumkin.',
-                lastMessageAt: new Date(),
-                isPrivate: true
-            });
-        } catch (chatErr) {
-            console.error('Failed to create trade chat:', chatErr);
-            // Don't fail the whole trade if chat creation fails, but log it
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                const chatRes = await client.query(
+                    "INSERT INTO chats (type, name, link) VALUES ('private', $1, $2) RETURNING *",
+                    ['P2P Trade Chat', `trade_${trade.id}`]
+                );
+                const chat = chatRes.rows[0];
+                await client.query(
+                    'INSERT INTO chat_participants (chat_id, user_id) VALUES ($1, $2), ($1, $3)',
+                    [chat.id, buyerId, sellerId]
+                );
+                await client.query('COMMIT');
+            } catch (chatErr) {
+                await client.query('ROLLBACK');
+                console.error('Failed to create trade chat:', chatErr);
+            } finally {
+                client.release();
+            }
+        } catch (connErr) {
+            console.error('DB connection error for trade chat:', connErr);
         }
 
         const io = req.app.get('io');

@@ -1,7 +1,6 @@
 import app from './app';
 import http from 'http';
 import { Server } from 'socket.io';
-import { connectMongoDB } from './config/database';
 import { SocketService } from './socket/socket.service';
 import dotenv from 'dotenv';
 
@@ -26,9 +25,6 @@ new SocketService(io);
 
 const startServer = async () => {
     try {
-        // Connect to MongoDB
-        await connectMongoDB();
-
         server.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
         });

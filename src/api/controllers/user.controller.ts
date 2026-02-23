@@ -14,6 +14,15 @@ export const getUsers = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
+        console.log('[getUserById] Request for userId:', userId);
+
+        // UUID validation (Relaxed)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(userId as string)) {
+            console.warn('[getUserById] Invalid UUID format received:', userId);
+            return res.status(404).json({ message: 'Invalid user ID format' });
+        }
+
         const result = await pool.query(`
             SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
                    p.bio, p.is_expert, p.profession, p.specialization, p.experience_years, 
@@ -24,12 +33,16 @@ export const getUserById = async (req: Request, res: Response) => {
             WHERE u.id = $1
         `, [userId]);
 
-        if (result.rows.length === 0) return res.status(404).json({ message: 'User not found' });
+        if (result.rows.length === 0) {
+            console.warn('[getUserById] User not found for ID:', userId);
+            return res.status(404).json({ message: 'User not found' });
+        }
 
+        console.log('[getUserById] Success fetching details for:', userId);
         res.json(result.rows[0]);
-    } catch (e) {
-        console.error('GetUserById Error:', e);
-        res.status(500).json({ message: 'Server error' });
+    } catch (e: any) {
+        console.error('[getUserById] DATABASE ERROR:', e);
+        res.status(500).json({ message: 'Server error', details: e.message });
     }
 };
 
@@ -210,8 +223,8 @@ export const addContact = async (req: Request, res: Response) => {
 
         if (!contactUserId) return res.status(400).json({ message: 'Contact user ID is required' });
 
-        // UUID validation
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        // UUID validation (Relaxed)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(contactUserId)) {
             console.warn(`[addContact] Invalid UUID received: ${contactUserId}`);
             return res.status(400).json({ message: 'Noto\'g\'ri foydalanuvchi ID formati' });

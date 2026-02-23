@@ -1,6 +1,5 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { Pool } from 'pg';
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 if (process.env.NODE_ENV !== 'production') {
@@ -37,19 +36,6 @@ pool.on('error', (err) => {
     process.exit(-1);
 });
 
-// MongoDB Connection
-const connectMongoDB = async () => {
-    try {
-        const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mali_platform';
-        console.log('Attempting to connect to MongoDB with URI:', mongoURI.replace(/:([^:@]+)@/, ':****@'));
-        await mongoose.connect(mongoURI);
-        console.log('Connected to MongoDB database');
-    } catch (error) {
-        console.error('MongoDB connection error:', error);
-        process.exit(1);
-    }
-};
-
 const query = (text: string, params?: any) => pool.query(text, params);
 
-export { pool, query, connectMongoDB };
+export { pool, query };
