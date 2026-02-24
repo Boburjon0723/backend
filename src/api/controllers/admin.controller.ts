@@ -17,9 +17,9 @@ export const getPendingExperts = async (req: Request, res: Response) => {
             ORDER BY p.updated_at DESC
         `);
         res.status(200).json(result.rows);
-    } catch (error) {
-        console.error('Admin Fetch Pending Experts Error:', error);
-        res.status(500).json({ message: 'Failed to fetch pending experts' });
+    } catch (error: any) {
+        console.error('Admin Fetch Pending Experts Error:', error.message, error.stack);
+        res.status(500).json({ message: 'Failed to fetch pending experts', error: error.message });
     }
 };
 
@@ -187,7 +187,8 @@ export const getAllTransactions = async (req: Request, res: Response) => {
             ORDER BY t.created_at DESC LIMIT 100
         `);
         res.status(200).json(result.rows);
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch transactions' });
+    } catch (error: any) {
+        console.error('Admin Fetch Transactions Error:', error.message, error.stack);
+        res.status(500).json({ message: 'Failed to fetch transactions', error: error.message });
     }
 };
