@@ -5,7 +5,9 @@ import {
     rejectTopUp,
     getAllUsers,
     updateUserStatus,
-    getAllTransactions
+    getAllTransactions,
+    getPendingExperts,
+    verifyExpert
 } from '../controllers/admin.controller';
 import { authenticateToken, requireAdmin } from '../../middleware/auth.middleware';
 
@@ -22,5 +24,8 @@ router.get('/users', getAllUsers);
 router.post('/users/status', updateUserStatus);
 
 router.get('/transactions', getAllTransactions);
+
+router.get('/experts/pending', getPendingExperts);
+router.post('/experts/verify', verifyExpert);
 
 export default router;

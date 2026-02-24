@@ -11,9 +11,7 @@ console.log('Database URL check:', process.env.DATABASE_URL ? 'URL exists' : 'UR
 const isProduction = process.env.NODE_ENV === 'production';
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
 // Test connection immediately

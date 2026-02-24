@@ -27,7 +27,10 @@ export const getUserById = async (req: Request, res: Response) => {
             SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
                    p.bio, p.is_expert, p.profession, p.specialization, p.experience_years, 
                    p.service_price, p.working_hours, p.languages, p.verified_status,
-                   p.wiloyat, p.tuman
+                   p.wiloyat, p.tuman, p.specialization_details, p.has_diploma,
+                   p.institution, p.current_workplace, p.diploma_url, p.certificate_url,
+                   p.id_url, p.selfie_url, p.hourly_rate, p.currency, p.service_languages,
+                   p.service_format, p.bio_expert, p.specialty_desc, p.services_json
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             WHERE u.id = $1
@@ -54,7 +57,10 @@ export const getProfile = async (req: Request, res: Response) => {
             SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
                    p.bio, p.is_expert, p.profession, p.specialization, p.experience_years, 
                    p.service_price, p.working_hours, p.languages, p.verified_status,
-                   p.wiloyat, p.tuman
+                   p.wiloyat, p.tuman, p.specialization_details, p.has_diploma,
+                   p.institution, p.current_workplace, p.diploma_url, p.certificate_url,
+                   p.id_url, p.selfie_url, p.hourly_rate, p.currency, p.service_languages,
+                   p.service_format, p.bio_expert, p.specialty_desc, p.services_json
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             WHERE u.id = $1
@@ -74,9 +80,13 @@ export const updateProfile = async (req: Request, res: Response) => {
         // @ts-ignore
         const userId = req.user.id;
         const {
-            name, surname, username, bio, avatar_url,
+            name, surname, username, bio, avatar_url, birthday,
             is_expert, profession, specialization, experience_years,
-            service_price, working_hours, languages, wiloyat, tuman
+            service_price, working_hours, languages, wiloyat, tuman,
+            specialization_details, has_diploma, institution, current_workplace,
+            diploma_url, certificate_url, id_url, selfie_url,
+            hourly_rate, currency, service_languages, service_format,
+            bio_expert, specialty_desc, services_json
         } = req.body;
         console.log('[updateProfile] Payload:', req.body);
 
@@ -105,12 +115,21 @@ export const updateProfile = async (req: Request, res: Response) => {
                     `INSERT INTO user_profiles (
                         user_id, bio, is_expert, profession, specialization, 
                         experience_years, service_price, working_hours, languages,
-                        wiloyat, tuman
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                        wiloyat, tuman, verified_status, specialization_details,
+                        has_diploma, institution, current_workplace, diploma_url,
+                        certificate_url, id_url, selfie_url, hourly_rate, currency,
+                        service_languages, service_format, bio_expert, specialty_desc,
+                        services_json
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
                     [
                         userId, bio || '', is_expert || false, profession || '', specialization || '',
                         experience_years || 0, service_price || 0, working_hours || '', languages || '',
-                        wiloyat || '', tuman || ''
+                        wiloyat || '', tuman || '', is_expert ? 'pending' : 'none',
+                        specialization_details || '', has_diploma || false, institution || '',
+                        current_workplace || '', diploma_url || '', certificate_url || '',
+                        id_url || '', selfie_url || '', hourly_rate || 0, currency || 'MALI',
+                        service_languages || '', service_format || '', bio_expert || '',
+                        specialty_desc || '', services_json || '[]'
                     ]
                 );
             } else {
@@ -125,12 +144,32 @@ export const updateProfile = async (req: Request, res: Response) => {
                         working_hours = COALESCE($7, working_hours),
                         languages = COALESCE($8, languages),
                         wiloyat = COALESCE($9, wiloyat),
-                        tuman = COALESCE($10, tuman)
-                    WHERE user_id = $11`,
+                        tuman = COALESCE($10, tuman),
+                        verified_status = CASE WHEN $2 = TRUE AND verified_status = 'none' THEN 'pending' ELSE verified_status END,
+                        specialization_details = COALESCE($11, specialization_details),
+                        has_diploma = COALESCE($12, has_diploma),
+                        institution = COALESCE($13, institution),
+                        current_workplace = COALESCE($14, current_workplace),
+                        diploma_url = COALESCE($15, diploma_url),
+                        certificate_url = COALESCE($16, certificate_url),
+                        id_url = COALESCE($17, id_url),
+                        selfie_url = COALESCE($18, selfie_url),
+                        hourly_rate = COALESCE($19, hourly_rate),
+                        currency = COALESCE($20, currency),
+                        service_languages = COALESCE($21, service_languages),
+                        service_format = COALESCE($22, service_format),
+                        bio_expert = COALESCE($23, bio_expert),
+                        specialty_desc = COALESCE($24, specialty_desc),
+                        services_json = COALESCE($25, services_json)
+                    WHERE user_id = $26`,
                     [
                         bio, is_expert, profession, specialization,
                         experience_years, service_price, working_hours, languages,
-                        wiloyat, tuman, userId
+                        wiloyat, tuman, specialization_details, has_diploma,
+                        institution, current_workplace, diploma_url, certificate_url,
+                        id_url, selfie_url, hourly_rate, currency,
+                        service_languages, service_format, bio_expert, specialty_desc,
+                        services_json, userId
                     ]
                 );
             }
@@ -196,7 +235,7 @@ export const searchUsers = async (req: Request, res: Response) => {
         }
 
         if (expert === 'true') {
-            query += ` AND p.is_expert = TRUE`;
+            query += ` AND p.is_expert = TRUE AND p.verified_status = 'approved'`;
         }
 
         if (profession) {

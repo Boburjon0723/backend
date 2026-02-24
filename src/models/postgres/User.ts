@@ -13,6 +13,7 @@ export interface User {
     email: string | null;
     username?: string;
     bio?: string;
+    birthday?: Date;
     // Expert fields
     region?: string;
     is_expert?: boolean;
@@ -24,6 +25,22 @@ export interface User {
     languages?: string; // JSON string or comma separated
     rating?: number;
     is_verified?: boolean;
+    verified_status?: 'none' | 'pending' | 'approved' | 'rejected';
+    specialization_details?: string;
+    has_diploma?: boolean;
+    institution?: string;
+    current_workplace?: string;
+    diploma_url?: string;
+    certificate_url?: string;
+    id_url?: string;
+    selfie_url?: string;
+    hourly_rate?: number;
+    currency?: string;
+    service_languages?: string;
+    service_format?: string;
+    bio_expert?: string;
+    specialty_desc?: string;
+    services_json?: string; // JSON string
 }
 
 export const UserModel = {
@@ -67,6 +84,7 @@ export const UserModel = {
         addField('age');
         addField('username');
         addField('bio');
+        addField('birthday');
 
         // Map 'avatar' from input to 'avatar_url' in DB
         if ((data as any).avatar) {
@@ -87,6 +105,22 @@ export const UserModel = {
         addField('languages');
         addField('rating');
         addField('is_verified');
+        addField('verified_status');
+        addField('specialization_details');
+        addField('has_diploma');
+        addField('institution');
+        addField('current_workplace');
+        addField('diploma_url');
+        addField('certificate_url');
+        addField('id_url');
+        addField('selfie_url');
+        addField('hourly_rate');
+        addField('currency');
+        addField('service_languages');
+        addField('service_format');
+        addField('bio_expert');
+        addField('specialty_desc');
+        addField('services_json');
 
         if (fields.length === 0) return null;
 

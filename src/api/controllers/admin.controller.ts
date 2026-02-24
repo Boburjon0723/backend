@@ -3,6 +3,46 @@ import { pool } from '../../config/database';
 import { TransactionModel } from '../../models/postgres/Transaction';
 import bcrypt from 'bcryptjs';
 
+// Expert Management
+export const getPendingExperts = async (req: Request, res: Response) => {
+    try {
+        const result = await pool.query(`
+            SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
+                   p.profession, p.specialization_details, p.experience_years, 
+                   p.institution, p.current_workplace, p.hourly_rate, p.currency,
+                   p.verified_status, p.created_at as profile_created_at
+            FROM users u
+            JOIN user_profiles p ON u.id = p.user_id
+            WHERE p.verified_status = 'pending'
+            ORDER BY p.updated_at DESC
+        `);
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('Admin Fetch Pending Experts Error:', error);
+        res.status(500).json({ message: 'Failed to fetch pending experts' });
+    }
+};
+
+export const verifyExpert = async (req: Request, res: Response) => {
+    try {
+        const { userId, status } = req.body; // status: 'approved' | 'rejected'
+        if (!['approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ message: 'Invalid status' });
+        }
+
+        await pool.query(`
+            UPDATE user_profiles 
+            SET verified_status = $1, is_expert = $2, updated_at = NOW() 
+            WHERE user_id = $3
+        `, [status, status === 'approved', userId]);
+
+        res.status(200).json({ message: `Expert status updated to ${status}` });
+    } catch (error) {
+        console.error('Verify Expert Error:', error);
+        res.status(500).json({ message: 'Update failed' });
+    }
+};
+
 // Top Up Management
 export const getAllTopUpRequests = async (req: Request, res: Response) => {
     try {
