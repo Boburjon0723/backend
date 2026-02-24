@@ -237,7 +237,11 @@ export const searchUsers = async (req: Request, res: Response) => {
 
         let query = `
             SELECT u.id, u.name, u.surname, u.username, u.avatar_url, u.phone,
-                   p.is_expert, p.profession, p.service_price, p.rating
+                   p.is_expert, p.profession, p.specialization, p.experience_years, 
+                   p.service_price, p.hourly_rate, p.currency, p.languages, 
+                   p.verified_status, p.specialization_details, p.bio_expert,
+                   p.specialty_desc, p.service_languages, p.service_format,
+                   p.institution, p.current_workplace
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             WHERE 1=1
