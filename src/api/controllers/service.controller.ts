@@ -25,7 +25,7 @@ export const initiateSession = async (req: Request, res: Response) => {
         }
 
         // 2. Check client balance
-        const walletRes = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [client_id]);
+        const walletRes = await client.query('SELECT balance FROM token_balances WHERE user_id = $1 FOR UPDATE', [client_id]);
         if (walletRes.rows.length === 0) throw new Error('Client wallet not found');
 
         const balance = parseFloat(walletRes.rows[0].balance);
@@ -35,8 +35,8 @@ export const initiateSession = async (req: Request, res: Response) => {
 
         // 3. Lock funds
         await client.query(`
-            UPDATE wallets 
-            SET balance = balance - $1, locked = locked + $1 
+            UPDATE token_balances 
+            SET balance = balance - $1, locked_balance = locked_balance + $1 
             WHERE user_id = $2
         `, [amount_mali, client_id]);
 
@@ -88,10 +88,10 @@ export const completeSession = async (req: Request, res: Response) => {
         }
 
         // Transfer locked funds from client to expert
-        // 1. Deduct from client's locked
-        await client.query('UPDATE wallets SET locked = locked - $1 WHERE user_id = $2', [session.amount_mali, session.client_id]);
+        // 1. Deduct from client's locked_balance
+        await client.query('UPDATE token_balances SET locked_balance = locked_balance - $1 WHERE user_id = $2', [session.amount_mali, session.client_id]);
         // 2. Add to expert's balance
-        await client.query('UPDATE wallets SET balance = balance + $1 WHERE user_id = $2', [session.amount_mali, session.expert_id]);
+        await client.query('UPDATE token_balances SET balance = balance + $1 WHERE user_id = $2', [session.amount_mali, session.expert_id]);
 
         // Update session status
         const updatedRes = await client.query(`
@@ -137,7 +137,7 @@ export const cancelSession = async (req: Request, res: Response) => {
         }
 
         // Return locked funds to client
-        await client.query('UPDATE wallets SET locked = locked - $1, balance = balance + $1 WHERE user_id = $2', [session.amount_mali, session.client_id]);
+        await client.query('UPDATE token_balances SET locked_balance = locked_balance - $1, balance = balance + $1 WHERE user_id = $2', [session.amount_mali, session.client_id]);
 
         const updatedRes = await client.query(`
             UPDATE service_sessions SET status = 'cancelled', updated_at = NOW() WHERE id = $1 RETURNING *

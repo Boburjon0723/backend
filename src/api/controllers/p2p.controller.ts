@@ -64,7 +64,7 @@ export const createAd = async (req: Request, res: Response) => {
 
     try {
         if (type === 'sell') {
-            const balanceRes = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [userId]);
+            const balanceRes = await pool.query('SELECT balance FROM token_balances WHERE user_id = $1', [userId]);
             const balance = parseFloat(balanceRes.rows[0]?.balance || '0');
             if (balance < amount) {
                 return res.status(400).json({ message: 'Insufficient balance to create sell ad' });
@@ -126,7 +126,7 @@ export const initiateTrade = async (req: Request, res: Response) => {
         const feeAmount = tradeAmount * feeRate;
         const totalDeduct = tradeAmount + feeAmount;
 
-        const walletRes = await client.query('SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE', [sellerId]);
+        const walletRes = await client.query('SELECT balance FROM token_balances WHERE user_id = $1 FOR UPDATE', [sellerId]);
         const currentBalance = parseFloat(walletRes.rows[0]?.balance || '0');
 
         if (currentBalance < totalDeduct) {
@@ -134,7 +134,7 @@ export const initiateTrade = async (req: Request, res: Response) => {
         }
 
         await client.query(
-            'UPDATE wallets SET balance = balance - $1, locked = locked + $1 WHERE user_id = $2',
+            'UPDATE token_balances SET balance = balance - $1, locked_balance = locked_balance + $1 WHERE user_id = $2',
             [totalDeduct, sellerId]
         );
 
@@ -216,11 +216,11 @@ export const confirmTrade = async (req: Request, res: Response) => {
 
         const totalLocked = parseFloat(trade.amount_mali) + parseFloat(trade.fee_amount);
 
-        // 1. Deduct Locked from Seller (Burn it effectively from locked)
-        await client.query('UPDATE wallets SET locked = locked - $1 WHERE user_id = $2', [totalLocked, trade.seller_id]);
+        // 1. Deduct Locked from Seller
+        await client.query('UPDATE token_balances SET locked_balance = locked_balance - $1 WHERE user_id = $2', [totalLocked, trade.seller_id]);
 
         // 2. Add Amount to Buyer Balance
-        await client.query('UPDATE wallets SET balance = balance + $1 WHERE user_id = $2', [trade.amount_mali, trade.buyer_id]);
+        await client.query('UPDATE token_balances SET balance = balance + $1 WHERE user_id = $2', [trade.amount_mali, trade.buyer_id]);
 
         // 3. Add Fee to Platform Balance
         // Check if platform balance exists, if not create default
@@ -274,7 +274,7 @@ export const cancelTrade = async (req: Request, res: Response) => {
 
         // Refund Seller: Remove from Locked, Add back to Balance
         await client.query(
-            'UPDATE wallets SET locked = locked - $1, balance = balance + $1 WHERE user_id = $2',
+            'UPDATE token_balances SET locked_balance = locked_balance - $1, balance = balance + $1 WHERE user_id = $2',
             [totalLocked, trade.seller_id]
         );
 

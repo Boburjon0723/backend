@@ -3,15 +3,14 @@ import bcrypt from 'bcryptjs';
 import { TransactionModel } from '../../models/postgres/Transaction';
 import { pool } from '../../config/database';
 
-// Helper to get Central Reserve Wallet ID
+// Helper to get Central Reserve Wallet ID (Deprecated: Use platform_balance directly)
 async function getCentralReserveId(client: any): Promise<string | null> {
     const res = await client.query(`
-        SELECT w.id, w.user_id 
-        FROM wallets w
-        JOIN users u ON w.user_id = u.id
+        SELECT u.id 
+        FROM users u
         WHERE u.email = 'reserve@mali.system'
     `);
-    return res.rows[0]?.user_id || null;
+    return res.rows[0]?.id || null;
 }
 
 export const setupWallet = async (req: Request, res: Response) => {
@@ -28,10 +27,9 @@ export const setupWallet = async (req: Request, res: Response) => {
         const pinHash = await bcrypt.hash(pin, salt);
 
         await client.query(`
-            INSERT INTO wallets (user_id, pin_hash, updated_at)
-            VALUES ($2, $1, NOW())
-            ON CONFLICT (user_id) DO UPDATE 
-            SET pin_hash = EXCLUDED.pin_hash, updated_at = NOW()
+            UPDATE token_balances 
+            SET pin_hash = $1, updated_at = NOW() 
+            WHERE user_id = $2
         `, [pinHash, userId]);
 
         // If wallet didn't exist (edge case), create it? init_wallet_db already creates rows for existing users.
@@ -74,7 +72,7 @@ export const transferCoins = async (req: Request, res: Response) => {
         }
 
         // 1. Fetch Sender Wallet & Verify PIN
-        const senderWalletRes = await client.query('SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE', [senderId]);
+        const senderWalletRes = await client.query('SELECT * FROM token_balances WHERE user_id = $1 FOR UPDATE', [senderId]);
         const senderWallet = senderWalletRes.rows[0];
 
         if (!senderWallet) {
@@ -99,18 +97,18 @@ export const transferCoins = async (req: Request, res: Response) => {
         }
 
         // 2. Fetch Receiver Wallet
-        const receiverWalletRes = await client.query('SELECT * FROM wallets WHERE user_id = $1 FOR UPDATE', [receiverId]);
+        const receiverWalletRes = await client.query('SELECT * FROM token_balances WHERE user_id = $1 FOR UPDATE', [receiverId]);
         let receiverWallet = receiverWalletRes.rows[0];
 
         if (!receiverWallet) {
-            // Create if not exists (auto-create wallet for receiver)
-            const newW = await client.query('INSERT INTO wallets (user_id, balance) VALUES ($1, 0) RETURNING *', [receiverId]);
+            // Create if not exists
+            const newW = await client.query('INSERT INTO token_balances (user_id, balance) VALUES ($1, 0) RETURNING *', [receiverId]);
             receiverWallet = newW.rows[0];
         }
 
         // 3. Execute Transfer
-        await client.query('UPDATE wallets SET balance = balance - $1 WHERE user_id = $2', [transferAmount, senderId]);
-        await client.query('UPDATE wallets SET balance = balance + $1 WHERE user_id = $2', [transferAmount, receiverId]);
+        await client.query('UPDATE token_balances SET balance = balance - $1 WHERE user_id = $2', [transferAmount, senderId]);
+        await client.query('UPDATE token_balances SET balance = balance + $1 WHERE user_id = $2', [transferAmount, receiverId]);
 
         // 4. Record Transaction
         const transaction = await TransactionModel.create(client, {
@@ -144,21 +142,18 @@ export const transferCoins = async (req: Request, res: Response) => {
 export const getBalance = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const resWallet = await pool.query('SELECT balance, is_locked FROM wallets WHERE user_id = $1', [userId]);
+        const resWallet = await pool.query('SELECT balance, locked_balance, pin_hash, is_locked FROM token_balances WHERE user_id = $1', [userId]);
 
         if (resWallet.rows.length === 0) {
-            // Return 0 if no wallet
             return res.status(200).json({ balance: 0, locked_balance: 0, currency: 'MALI', hasPin: false });
         }
 
         const wallet = resWallet.rows[0];
-        // Check if PIN is set by querying pin_hash existence
-        const pinCheck = await pool.query('SELECT pin_hash FROM wallets WHERE user_id = $1', [userId]);
-        const hasPin = !!pinCheck.rows[0]?.pin_hash;
+        const hasPin = !!wallet.pin_hash;
 
         res.status(200).json({
             balance: parseFloat(wallet.balance),
-            locked_balance: 0, // Implement locked logic later
+            locked_balance: parseFloat(wallet.locked_balance || 0),
             currency: 'MALI',
             hasPin
         });
@@ -172,7 +167,7 @@ export const requestRecovery = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
         await pool.query(`
-            UPDATE wallets 
+            UPDATE token_balances 
             SET recovery_status = 'pending', recovery_requested_at = NOW() 
             WHERE user_id = $1
         `, [userId]);

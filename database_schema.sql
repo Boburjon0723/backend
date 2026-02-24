@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS token_balances (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     balance DECIMAL(20, 4) DEFAULT 0.0000,
     locked_balance DECIMAL(20, 4) DEFAULT 0.0000,
+    pin_hash VARCHAR(255),
+    is_locked BOOLEAN DEFAULT FALSE,
+    recovery_status VARCHAR(50),
+    recovery_requested_at TIMESTAMP WITH TIME ZONE,
     lifetime_earned DECIMAL(20, 4) DEFAULT 0.0000,
     lifetime_spent DECIMAL(20, 4) DEFAULT 0.0000,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
