@@ -83,38 +83,36 @@ export const approveTopUp = async (req: Request, res: Response) => {
         const amount = parseFloat(request.amount);
         const userId = request.user_id;
 
-        // 2. Get Central Reserve (Assuming the logged in admin controls it, or we use a special system wallet)
-        // For simplicity, we'll assume the 'admin' user IS the reserve or has rights to mint/transfer from reserve.
-        // Let's find the Reserve Wallet ID.
-        const reserveRes = await client.query(`
-            SELECT w.* 
-            FROM wallets w 
-            JOIN users u ON w.user_id = u.id 
-            WHERE u.email = 'reserve@mali.system'
-        `);
-        const reserveWallet = reserveRes.rows[0];
+        // 2. Get Platform Treasury Balance
+        const treasuryRes = await client.query('SELECT balance FROM platform_balance WHERE id = 1 FOR UPDATE');
+        const treasury = treasuryRes.rows[0];
 
-        if (!reserveWallet) {
+        if (!treasury) {
             await client.query('ROLLBACK');
-            return res.status(500).json({ message: 'Reserve wallet not found' });
+            return res.status(500).json({ message: 'Platform treasury not found' });
         }
 
-        // 3. Check Balance (Reserve should have infinite or huge balance, but let's check)
-        if (parseFloat(reserveWallet.balance) < amount) {
+        // 3. Check Balance
+        if (parseFloat(treasury.balance) < amount) {
             await client.query('ROLLBACK');
-            return res.status(400).json({ message: 'Reserve wallet has insufficient funds' });
+            return res.status(400).json({ message: 'Insufficient treasury balance' });
         }
 
-        // 4. Transfer
-        await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [amount, reserveWallet.id]);
-        await client.query('UPDATE wallets SET balance = balance + $1 WHERE user_id = $2', [amount, userId]);
+        // 4. Transfer from Treasury to User
+        await client.query('UPDATE platform_balance SET balance = balance - $1 WHERE id = 1', [amount]);
+        await client.query(`
+            UPDATE token_balances 
+            SET balance = balance + $1, 
+                lifetime_earned = lifetime_earned + $1 
+            WHERE user_id = $2
+        `, [amount, userId]);
 
         // 5. Update Request Status
         await client.query('UPDATE topup_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['approved', requestId]);
 
         // 6. Record Transaction
         await TransactionModel.create(client, {
-            sender_id: reserveWallet.user_id,
+            sender_id: null, // System/Treasury
             receiver_id: userId,
             amount: amount,
             fee: 0,
@@ -158,7 +156,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
 
         // Attach wallet info
         for (let user of users) {
-            const w = await pool.query('SELECT balance FROM wallets WHERE user_id = $1', [user.id]);
+            const w = await pool.query('SELECT balance FROM token_balances WHERE user_id = $1', [user.id]);
             user.wallet = w.rows[0] || { balance: 0 };
         }
 
