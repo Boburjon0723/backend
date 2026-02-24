@@ -41,6 +41,7 @@ export interface User {
     bio_expert?: string;
     specialty_desc?: string;
     services_json?: string; // JSON string
+    resume_url?: string;
 }
 
 export const UserModel = {
@@ -67,72 +68,120 @@ export const UserModel = {
     },
 
     async update(id: string, data: Partial<User>): Promise<User | null> {
-        const fields: string[] = [];
-        const values: any[] = [];
-        let idx = 1;
-
-        // Helper to add field if exists
-        const addField = (key: keyof User, dbCol?: string) => {
-            if (data[key] !== undefined) {
-                fields.push(`${dbCol || key} = $${idx++}`);
-                values.push(data[key]);
-            }
-        };
-
-        addField('name');
-        addField('surname');
-        addField('age');
-        addField('username');
-        addField('bio');
-        addField('birthday');
-
-        // Map 'avatar' from input to 'avatar_url' in DB
-        if ((data as any).avatar) {
-            fields.push(`avatar_url = $${idx++}`);
-            values.push((data as any).avatar);
-        } else {
-            addField('avatar_url');
-        }
-
-        // Expert fields
-        addField('region');
-        addField('is_expert');
-        addField('profession');
-        addField('specialization');
-        addField('experience_years');
-        addField('service_price');
-        addField('working_hours');
-        addField('languages');
-        addField('rating');
-        addField('is_verified');
-        addField('verified_status');
-        addField('specialization_details');
-        addField('has_diploma');
-        addField('institution');
-        addField('current_workplace');
-        addField('diploma_url');
-        addField('certificate_url');
-        addField('id_url');
-        addField('selfie_url');
-        addField('hourly_rate');
-        addField('currency');
-        addField('service_languages');
-        addField('service_format');
-        addField('bio_expert');
-        addField('specialty_desc');
-        addField('services_json');
-
-        if (fields.length === 0) return null;
-
-        values.push(id);
-        const query = `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
-
+        const client = await pool.connect();
         try {
-            const result = await pool.query(query, values);
+            await client.query('BEGIN');
+
+            // 1. Update Users Table (Basic fields)
+            const userFields: string[] = [];
+            const userValues: any[] = [];
+            let uIdx = 1;
+
+            const addUserField = (key: keyof User, dbCol?: string) => {
+                if (data[key] !== undefined) {
+                    userFields.push(`${dbCol || key} = $${uIdx++}`);
+                    userValues.push(data[key]);
+                }
+            };
+
+            addUserField('name');
+            addUserField('surname');
+            addUserField('age');
+            addUserField('username');
+            addUserField('email');
+
+            if (data.avatar_url !== undefined) {
+                userFields.push(`avatar_url = $${uIdx++}`);
+                userValues.push(data.avatar_url);
+            } else if ((data as any).avatar !== undefined) {
+                userFields.push(`avatar_url = $${uIdx++}`);
+                userValues.push((data as any).avatar);
+            }
+
+            if (userFields.length > 0) {
+                userValues.push(id);
+                await client.query(`UPDATE users SET ${userFields.join(', ')} WHERE id = $${uIdx}`, userValues);
+            }
+
+            // 2. Update User Profiles Table (Expert fields)
+            const profileFields: string[] = [];
+            const profileValues: any[] = [];
+            let pIdx = 1;
+
+            const addProfileField = (key: keyof User, dbCol?: string) => {
+                if (data[key] !== undefined) {
+                    profileFields.push(`${dbCol || key} = $${pIdx++}`);
+                    profileValues.push(data[key]);
+                }
+            };
+
+            addProfileField('bio');
+            addProfileField('birthday');
+            addProfileField('is_expert');
+            addProfileField('profession');
+            addProfileField('specialization');
+            addProfileField('experience_years');
+            addProfileField('service_price');
+            addProfileField('working_hours');
+            addProfileField('languages');
+            addProfileField('verified_status');
+            addProfileField('specialization_details');
+            addProfileField('has_diploma');
+            addProfileField('institution');
+            addProfileField('current_workplace');
+            addProfileField('diploma_url');
+            addProfileField('certificate_url');
+            addProfileField('id_url');
+            addProfileField('selfie_url');
+            addProfileField('hourly_rate');
+            addProfileField('currency');
+            addProfileField('service_languages');
+            addProfileField('service_format');
+            addProfileField('bio_expert');
+            addProfileField('specialty_desc');
+            addProfileField('services_json');
+            addProfileField('resume_url');
+
+            if (profileFields.length > 0) {
+                // Ensure profile exists
+                const profileExists = await client.query('SELECT 1 FROM user_profiles WHERE user_id = $1', [id]);
+                if (profileExists.rows.length === 0) {
+                    await client.query('INSERT INTO user_profiles (user_id) VALUES ($1)', [id]);
+                }
+
+                // Handle re-verification logic if expert fields changed (consistent with controller)
+                if (data.is_expert === true || data.profession || data.specialization || data.hourly_rate) {
+                    const currentStatusRes = await client.query('SELECT verified_status FROM user_profiles WHERE user_id = $1', [id]);
+                    const currentStatus = currentStatusRes.rows[0]?.verified_status;
+
+                    if (currentStatus === 'none' || currentStatus === 'unverified' || currentStatus === 'rejected') {
+                        profileFields.push(`verified_status = $${pIdx++}`);
+                        profileValues.push('pending');
+                    }
+                }
+
+                profileValues.push(id);
+                await client.query(`UPDATE user_profiles SET ${profileFields.join(', ')} WHERE user_id = $${pIdx}`, profileValues);
+            }
+
+            await client.query('COMMIT');
+
+            // Return full joined user object
+            const result = await client.query(`
+                SELECT u.*, p.* 
+                FROM users u 
+                LEFT JOIN user_profiles p ON u.id = p.user_id 
+                WHERE u.id = $1
+            `, [id]);
+
             return result.rows[0] || null;
+
         } catch (e) {
-            console.error("DB Update Error:", e);
+            await client.query('ROLLBACK');
+            console.error("UserModel Update Error:", e);
             throw e;
+        } finally {
+            client.release();
         }
     },
 

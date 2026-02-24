@@ -124,6 +124,12 @@ export const transferCoins = async (req: Request, res: Response) => {
 
         await client.query('COMMIT');
 
+        const io = req.app.get('io');
+        if (io) {
+            io.to(senderId).emit('balance_updated');
+            io.to(receiverId).emit('balance_updated');
+        }
+
         res.status(200).json({
             message: 'Transfer successful',
             transaction,

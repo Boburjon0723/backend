@@ -8,8 +8,10 @@ export const getPendingExperts = async (req: Request, res: Response) => {
     try {
         const result = await pool.query(`
             SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
-                   p.profession, p.specialization_details, p.experience_years, 
+                   p.profession, p.specialization, p.specialization_details, p.experience_years, 
                    p.institution, p.current_workplace, p.hourly_rate, p.currency,
+                   p.has_diploma, p.diploma_url, p.certificate_url, p.id_url, p.selfie_url, p.resume_url,
+                   p.service_languages, p.service_format, p.bio_expert, p.specialty_desc,
                    p.verified_status, p.created_at as profile_created_at
             FROM users u
             JOIN user_profiles p ON u.id = p.user_id
@@ -34,9 +36,14 @@ export const verifyExpert = async (req: Request, res: Response) => {
             UPDATE user_profiles 
             SET verified_status = $1, is_expert = $2, updated_at = NOW() 
             WHERE user_id = $3
-        `, [status, status === 'approved', userId]);
+            `, [status, status === 'approved', userId]);
 
-        res.status(200).json({ message: `Expert status updated to ${status}` });
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('expert_status_updated', { userId, status });
+        }
+
+        res.status(200).json({ message: `Expert status updated to ${status} ` });
     } catch (error) {
         console.error('Verify Expert Error:', error);
         res.status(500).json({ message: 'Update failed' });
@@ -51,7 +58,7 @@ export const getAllTopUpRequests = async (req: Request, res: Response) => {
             FROM topup_requests t
             JOIN users u ON t.user_id = u.id
             ORDER BY t.created_at DESC
-        `);
+            `);
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Admin Fetch TopUps Error:', error);
@@ -102,10 +109,10 @@ export const approveTopUp = async (req: Request, res: Response) => {
         await client.query('UPDATE platform_balance SET balance = balance - $1 WHERE id = 1', [amount]);
         await client.query(`
             UPDATE token_balances 
-            SET balance = balance + $1, 
-                lifetime_earned = lifetime_earned + $1 
+            SET balance = balance + $1,
+            lifetime_earned = lifetime_earned + $1 
             WHERE user_id = $2
-        `, [amount, userId]);
+            `, [amount, userId]);
 
         // 5. Update Request Status
         await client.query('UPDATE topup_requests SET status = $1, updated_at = NOW() WHERE id = $2', ['approved', requestId]);
@@ -123,6 +130,12 @@ export const approveTopUp = async (req: Request, res: Response) => {
         });
 
         await client.query('COMMIT');
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(userId).emit('balance_updated');
+        }
+
         res.status(200).json({ message: 'Top-up approved successfully' });
 
     } catch (error) {
@@ -170,7 +183,7 @@ export const updateUserStatus = async (req: Request, res: Response) => {
     try {
         const { userId, status } = req.body; // status: 'active' | 'blocked'
         await pool.query('UPDATE users SET is_active = $1 WHERE id = $2', [status === 'active', userId]);
-        res.status(200).json({ message: `User ${status}` });
+        res.status(200).json({ message: `User ${status} ` });
     } catch (error) {
         res.status(500).json({ message: 'Update failed' });
     }
@@ -185,7 +198,7 @@ export const getAllTransactions = async (req: Request, res: Response) => {
             LEFT JOIN users s ON t.sender_id = s.id
             LEFT JOIN users r ON t.receiver_id = r.id
             ORDER BY t.created_at DESC LIMIT 100
-        `);
+            `);
         res.status(200).json(result.rows);
     } catch (error: any) {
         console.error('Admin Fetch Transactions Error:', error.message, error.stack);

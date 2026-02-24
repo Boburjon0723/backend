@@ -109,8 +109,17 @@ export const updateProfile = async (req: Request, res: Response) => {
             );
 
             // Update Profile Table
-            const profileRes = await client.query('SELECT user_id FROM user_profiles WHERE user_id = $1', [userId]);
-            if (profileRes.rows.length === 0) {
+            const profileRes = await client.query('SELECT * FROM user_profiles WHERE user_id = $1', [userId]);
+            const existingProfile = profileRes.rows[0];
+
+            if (is_expert === true) {
+                // Basic validation for becoming an expert
+                if (!profession || !specialization || !experience_years || !hourly_rate) {
+                    throw new Error('Expert profiles require profession, specialization, experience, and hourly rate');
+                }
+            }
+
+            if (!existingProfile) {
                 await client.query(
                     `INSERT INTO user_profiles (
                         user_id, bio, is_expert, profession, specialization, 
@@ -133,6 +142,24 @@ export const updateProfile = async (req: Request, res: Response) => {
                     ]
                 );
             } else {
+                // EXPERT RE-VERIFICATION LOGIC
+                // If an approved expert changes their core credentials, reset to pending
+                let newVerifiedStatus = existingProfile.verified_status;
+
+                const criticalFieldsChanged =
+                    (profession && profession !== existingProfile.profession) ||
+                    (specialization && specialization !== existingProfile.specialization) ||
+                    (specialization_details && specialization_details !== existingProfile.specialization_details) ||
+                    (experience_years && parseInt(experience_years) !== parseInt(existingProfile.experience_years));
+
+                if (is_expert === true && (existingProfile.verified_status === 'none' || existingProfile.verified_status === 'rejected' || existingProfile.verified_status === 'unverified' || !existingProfile.verified_status)) {
+                    console.log(`[updateProfile] Setting expert ${userId} to pending (new, re-application, or migration)`);
+                    newVerifiedStatus = 'pending';
+                } else if (existingProfile.verified_status === 'approved' && criticalFieldsChanged) {
+                    console.log(`[updateProfile] Resetting approved expert ${userId} to pending due to critical field changes`);
+                    newVerifiedStatus = 'pending';
+                }
+
                 await client.query(
                     `UPDATE user_profiles SET 
                         bio = COALESCE($1, bio),
@@ -145,29 +172,29 @@ export const updateProfile = async (req: Request, res: Response) => {
                         languages = COALESCE($8, languages),
                         wiloyat = COALESCE($9, wiloyat),
                         tuman = COALESCE($10, tuman),
-                        verified_status = CASE WHEN $2 = TRUE AND verified_status = 'none' THEN 'pending' ELSE verified_status END,
-                        specialization_details = COALESCE($11, specialization_details),
-                        has_diploma = COALESCE($12, has_diploma),
-                        institution = COALESCE($13, institution),
-                        current_workplace = COALESCE($14, current_workplace),
-                        diploma_url = COALESCE($15, diploma_url),
-                        certificate_url = COALESCE($16, certificate_url),
-                        id_url = COALESCE($17, id_url),
-                        selfie_url = COALESCE($18, selfie_url),
-                        hourly_rate = COALESCE($19, hourly_rate),
-                        currency = COALESCE($20, currency),
-                        service_languages = COALESCE($21, service_languages),
-                        service_format = COALESCE($22, service_format),
-                        bio_expert = COALESCE($23, bio_expert),
-                        specialty_desc = COALESCE($24, specialty_desc),
-                        services_json = COALESCE($25, services_json)
-                    WHERE user_id = $26`,
+                        verified_status = $11,
+                        specialization_details = COALESCE($12, specialization_details),
+                        has_diploma = COALESCE($13, has_diploma),
+                        institution = COALESCE($14, institution),
+                        current_workplace = COALESCE($15, current_workplace),
+                        diploma_url = COALESCE($16, diploma_url),
+                        certificate_url = COALESCE($17, certificate_url),
+                        id_url = COALESCE($18, id_url),
+                        selfie_url = COALESCE($19, selfie_url),
+                        hourly_rate = COALESCE($20, hourly_rate),
+                        currency = COALESCE($21, currency),
+                        service_languages = COALESCE($22, service_languages),
+                        service_format = COALESCE($23, service_format),
+                        bio_expert = COALESCE($24, bio_expert),
+                        specialty_desc = COALESCE($25, specialty_desc),
+                        services_json = COALESCE($26, services_json)
+                    WHERE user_id = $27`,
                     [
                         bio, is_expert, profession, specialization,
                         experience_years, service_price, working_hours, languages,
-                        wiloyat, tuman, specialization_details, has_diploma,
-                        institution, current_workplace, diploma_url, certificate_url,
-                        id_url, selfie_url, hourly_rate, currency,
+                        wiloyat, tuman, newVerifiedStatus, specialization_details,
+                        has_diploma, institution, current_workplace, diploma_url,
+                        certificate_url, id_url, selfie_url, hourly_rate, currency,
                         service_languages, service_format, bio_expert, specialty_desc,
                         services_json, userId
                     ]

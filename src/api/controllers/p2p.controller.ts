@@ -176,6 +176,7 @@ export const initiateTrade = async (req: Request, res: Response) => {
         if (io) {
             io.to(sellerId).emit('p2p_trade_initiated', { tradeId: trade.id });
             io.to(buyerId).emit('p2p_trade_initiated', { tradeId: trade.id });
+            io.to(sellerId).emit('balance_updated'); // Seller's balance is locked
         }
 
         await client.query('COMMIT');
