@@ -124,7 +124,7 @@ export const UserModel = {
             addProfileField('service_price');
             addProfileField('working_hours');
             addProfileField('languages');
-            addProfileField('verified_status');
+            // handled below
             addProfileField('specialization_details');
             addProfileField('has_diploma');
             addProfileField('institution');
@@ -142,22 +142,28 @@ export const UserModel = {
             addProfileField('services_json');
             addProfileField('resume_url');
 
+            // Handle re-verification logic if expert fields changed (consistent with controller)
+            if (data.is_expert === true || data.profession || data.specialization || data.hourly_rate) {
+                // We need to know current status to decide if we reset to pending
+                const currentStatusRes = await client.query('SELECT verified_status FROM user_profiles WHERE user_id = $1', [id]);
+                const currentStatus = currentStatusRes.rows[0]?.verified_status;
+
+                if (currentStatus === 'none' || currentStatus === 'unverified' || currentStatus === 'rejected') {
+                    // Force to pending if not explicitly provided
+                    if (data.verified_status === undefined) {
+                        data.verified_status = 'pending';
+                    }
+                }
+            }
+
+            // Now add it safely - only one assignment will happen
+            addProfileField('verified_status');
+
             if (profileFields.length > 0) {
                 // Ensure profile exists
                 const profileExists = await client.query('SELECT 1 FROM user_profiles WHERE user_id = $1', [id]);
                 if (profileExists.rows.length === 0) {
                     await client.query('INSERT INTO user_profiles (user_id) VALUES ($1)', [id]);
-                }
-
-                // Handle re-verification logic if expert fields changed (consistent with controller)
-                if (data.is_expert === true || data.profession || data.specialization || data.hourly_rate) {
-                    const currentStatusRes = await client.query('SELECT verified_status FROM user_profiles WHERE user_id = $1', [id]);
-                    const currentStatus = currentStatusRes.rows[0]?.verified_status;
-
-                    if (currentStatus === 'none' || currentStatus === 'unverified' || currentStatus === 'rejected') {
-                        profileFields.push(`verified_status = $${pIdx++}`);
-                        profileValues.push('pending');
-                    }
                 }
 
                 profileValues.push(id);
