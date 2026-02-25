@@ -20,20 +20,21 @@ const storage = multer.diskStorage({
 export const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
+        fileSize: 100 * 1024 * 1024 // 100MB limit for videos
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-        const allowedExtensions = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp3|wav|ogg|m4a|webm/;
+        const allowedExtensions = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp3|wav|ogg|m4a|webm|mp4|mov|avi|mkv|3gp/;
         const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
         const mimetype = file.mimetype.startsWith('image/') ||
             file.mimetype.startsWith('audio/') ||
+            file.mimetype.startsWith('video/') ||
             file.mimetype === 'application/pdf' ||
             file.mimetype.includes('word');
 
         if (extname || mimetype) {
             cb(null, true);
         } else {
-            cb(new Error('Error: Only images, documents, and audio are allowed!'));
+            cb(new Error('Error: Only images, videos, documents, and audio are allowed!'));
         }
     }
 });
