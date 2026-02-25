@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { JobModel } from '../../models/postgres/Job';
 import { JobCategoryModel } from '../../models/postgres/JobCategory';
+import { pool } from '../../config/database';
 
 export class JobController {
     private jobModel: JobModel;

@@ -48,7 +48,7 @@ export interface Job {
 
 export class JobModel {
 
-    async create(job: Partial<Job>): Promise<Job> {
+    async create(job: Partial<Job>, client?: any): Promise<Job> {
         const query = `
             INSERT INTO jobs (
                 user_id, sub_type, category_id, type, status, short_text, 
@@ -67,7 +67,7 @@ export class JobModel {
         ];
 
         try {
-            const result = await pool.query(query, values);
+            const result = await (client || pool).query(query, values);
             return result.rows[0];
         } catch (error) {
             console.error('Job creation db error:', error);
