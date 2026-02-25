@@ -23,11 +23,14 @@ export const upload = multer({
         fileSize: 10 * 1024 * 1024 // 10MB limit
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-        const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|mp3|wav|ogg|m4a|webm/;
-        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = allowedTypes.test(file.mimetype);
+        const allowedExtensions = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp3|wav|ogg|m4a|webm/;
+        const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = file.mimetype.startsWith('image/') ||
+            file.mimetype.startsWith('audio/') ||
+            file.mimetype === 'application/pdf' ||
+            file.mimetype.includes('word');
 
-        if (extname && mimetype) {
+        if (extname || mimetype) {
             cb(null, true);
         } else {
             cb(new Error('Error: Only images, documents, and audio are allowed!'));

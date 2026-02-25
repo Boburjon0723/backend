@@ -82,13 +82,34 @@ export const ChatModel = {
     async findUserChats(userId: string): Promise<any[]> {
         const query = `
             SELECT c.*, 
-            (SELECT json_agg(user_id) FROM chat_participants WHERE chat_id = c.id) as participants
+            (SELECT json_agg(user_id) FROM chat_participants WHERE chat_id = c.id) as participants,
+            m.content as "lastMessage",
+            m.type as "lastMessageType",
+            m.created_at as "lastMessageAt"
             FROM chats c
             JOIN chat_participants cp ON c.id = cp.chat_id
+            LEFT JOIN LATERAL (
+                SELECT content, type, created_at 
+                FROM messages 
+                WHERE chat_id = c.id 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            ) m ON true
             WHERE cp.user_id = $1
-            ORDER BY c.updated_at DESC
+            ORDER BY COALESCE(m.created_at, c.updated_at) DESC
         `;
         const result = await pool.query(query, [userId]);
-        return result.rows;
+        return result.rows.map(row => {
+            let snippet = row.lastMessage;
+            if (row.lastMessageType === 'image') snippet = '📷 Rasm';
+            else if (row.lastMessageType === 'voice') snippet = '🎤 Ovoosli xabar';
+            else if (row.lastMessageType === 'file') snippet = '📁 Fayl';
+            else if (row.lastMessageType === 'transaction') snippet = '💰 O\'tkazma';
+
+            return {
+                ...row,
+                lastMessage: snippet
+            };
+        });
     }
 };

@@ -111,7 +111,11 @@ export const UserModel = {
             const addProfileField = (key: keyof User, dbCol?: string) => {
                 if (data[key] !== undefined) {
                     profileFields.push(`${dbCol || key} = $${pIdx++}`);
-                    profileValues.push(data[key]);
+                    let value = data[key];
+                    if (value === "" && (key === 'birthday' || key === 'experience_years' || key === 'service_price' || key === 'hourly_rate')) {
+                        value = null;
+                    }
+                    profileValues.push(value);
                 }
             };
 
@@ -195,5 +199,15 @@ export const UserModel = {
         const query = 'SELECT id, phone, name, surname, role, created_at FROM users LIMIT 50';
         const result = await pool.query(query);
         return result.rows;
+    },
+
+    async isBlocked(user1: string, user2: string): Promise<boolean> {
+        const query = `
+            SELECT 1 FROM user_blocks 
+            WHERE (blocker_id = $1 AND blocked_id = $2) 
+               OR (blocker_id = $2 AND blocked_id = $1)
+        `;
+        const result = await pool.query(query, [user1, user2]);
+        return result.rows.length > 0;
     }
 };

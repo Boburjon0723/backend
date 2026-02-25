@@ -4,6 +4,7 @@ import { MessageModel } from '../models/postgres/Message';
 import { TokenService } from '../services/token.service';
 import { ServiceModel } from '../models/postgres/Service';
 import { UserModel } from '../models/postgres/User';
+import { pool } from '../config/database';
 
 // Ensure the AuthenticatedSocket interface matches actual usage
 interface AuthenticatedSocket extends Socket {
@@ -69,6 +70,19 @@ export class SocketService {
             authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string }) => {
                 try {
                     const { roomId, content, type } = data;
+
+                    // Mutual Block Guard for Private Chats
+                    const chatRes = await pool.query(`SELECT type FROM chats WHERE id = $1`, [roomId]);
+                    if (chatRes.rows[0]?.type === 'private') {
+                        const participants = await pool.query(`SELECT user_id FROM chat_participants WHERE chat_id = $1`, [roomId]);
+                        const otherParticipant = participants.rows.find((p: any) => p.user_id !== authSocket.user.id);
+                        if (otherParticipant) {
+                            const isBlocked = await UserModel.isBlocked(authSocket.user.id, otherParticipant.user_id);
+                            if (isBlocked) {
+                                return authSocket.emit('error', { message: 'Xabar yuborish imkonsiz: Foydalanuvchi bloklangan' });
+                            }
+                        }
+                    }
 
                     // 1. Save to Postgres
                     const savedMessage = await MessageModel.create(

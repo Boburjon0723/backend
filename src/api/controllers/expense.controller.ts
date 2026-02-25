@@ -52,7 +52,7 @@ export const getExpenseStats = async (req: Request, res: Response) => {
 
     try {
         const stats = await pool.query(
-            'SELECT category, type, SUM(amount) as total_amount, COUNT(*) as count FROM expenses WHERE user_id = $1 GROUP BY category, type',
+            'SELECT category, type, SUM(amount) as total, COUNT(*) as count FROM expenses WHERE user_id = $1 GROUP BY category, type',
             [userId]
         );
 

@@ -51,6 +51,59 @@ const runAutoMigration = async () => {
                 BEGIN ALTER TABLE user_profiles ADD COLUMN bio_expert TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE user_profiles ADD COLUMN specialty_desc TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE user_profiles ADD COLUMN services_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
+
+                -- Job Board Enhancements
+                CREATE TABLE IF NOT EXISTS job_categories (
+                    id SERIAL PRIMARY KEY,
+                    name_uz VARCHAR(255) NOT NULL,
+                    name_ru VARCHAR(255) NOT NULL,
+                    icon VARCHAR(100),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    publication_price_mali DECIMAL(20, 4) DEFAULT 100.0000,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- Initial categories if none exist
+                IF NOT EXISTS (SELECT 1 FROM job_categories LIMIT 1) THEN
+                    INSERT INTO job_categories (name_uz, name_ru, icon, publication_price_mali) VALUES
+                    ('Huquqshunos (Yurist)', 'Юрист', 'Gavel', 150.0000),
+                    ('Psixolog', 'Психолог', 'HeartPulse', 100.0000),
+                    ('Repetitor (O‘qituvchi)', 'Репетитор', 'GraduationCap', 50.0000),
+                    ('Santexnik', 'Сантехник', 'Wrench', 30.0000),
+                    ('Elektrik', 'Электрик', 'Zap', 30.0000),
+                    ('Usta (Remontchi)', 'Мастер по ремонту', 'Hammer', 30.0000),
+                    ('Fotograf / Videograf', 'Фотограф / Видеограф', 'Camera', 80.0000),
+                    ('Avtomobil ustasi', 'Автомастер', 'Car', 40.0000),
+                    ('Buxgalter', 'Бухгалтер', 'Calculator', 120.0000),
+                    ('Hamshira / Qarovchi', 'Медсестра / Сиделка', 'Stethoscope', 40.0000);
+                END IF;
+
+                BEGIN ALTER TABLE jobs ADD COLUMN sub_type VARCHAR(20) DEFAULT 'seeker'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN category_id INTEGER REFERENCES job_categories(id); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN payment_status VARCHAR(20) DEFAULT 'unpaid'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN publication_fee DECIMAL(20, 4) DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN short_text TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN full_name VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN birth_date DATE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN location VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN experience_years INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN salary_min DECIMAL(20, 4); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN is_salary_negotiable BOOLEAN DEFAULT TRUE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN skills_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN has_diploma BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN has_certificate BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN resume_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN company_name VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN responsible_person VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN work_type VARCHAR(50); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN work_hours VARCHAR(100); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN day_off VARCHAR(100); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN age_range VARCHAR(50); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN gender_pref VARCHAR(20); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN requirements_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN salary_text VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN benefits_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE jobs ADD COLUMN apply_method_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
             END $$;
         `;
         await pool.query(sql);

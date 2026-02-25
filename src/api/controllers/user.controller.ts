@@ -25,7 +25,7 @@ export const getUserById = async (req: Request, res: Response) => {
 
         const result = await pool.query(`
             SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
-                   p.bio, p.is_expert, p.profession, p.specialization, p.experience_years, 
+                   p.bio, p.birthday, p.is_expert, p.profession, p.specialization, p.experience_years, 
                    p.service_price, p.working_hours, p.languages, p.verified_status,
                    p.wiloyat, p.tuman, p.specialization_details, p.has_diploma,
                    p.institution, p.current_workplace, p.diploma_url, p.certificate_url,
@@ -41,8 +41,20 @@ export const getUserById = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        // Check block status
+        // @ts-ignore
+        const currentUserId = req.user.id;
+        const blockCheck = await pool.query(`
+            SELECT blocker_id FROM user_blocks 
+            WHERE (blocker_id = $1 AND blocked_id = $2) 
+               OR (blocker_id = $2 AND blocked_id = $1)
+        `, [currentUserId, userId]);
+
+        const isBlocked = blockCheck.rows.length > 0;
+        const blockedByMe = blockCheck.rows.some(r => r.blocker_id === currentUserId);
+
         console.log('[getUserById] Success fetching details for:', userId);
-        res.json(result.rows[0]);
+        res.json({ ...result.rows[0], isBlocked, blockedByMe });
     } catch (e: any) {
         console.error('[getUserById] DATABASE ERROR:', e);
         res.status(500).json({ message: 'Server error', details: e.message });
@@ -55,7 +67,7 @@ export const getProfile = async (req: Request, res: Response) => {
         const userId = req.user.id;
         const result = await pool.query(`
             SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
-                   p.bio, p.is_expert, p.profession, p.specialization, p.experience_years, 
+                   p.bio, p.birthday, p.is_expert, p.profession, p.specialization, p.experience_years, 
                    p.service_price, p.working_hours, p.languages, p.verified_status,
                    p.wiloyat, p.tuman, p.specialization_details, p.has_diploma,
                    p.institution, p.current_workplace, p.diploma_url, p.certificate_url,
@@ -122,16 +134,16 @@ export const updateProfile = async (req: Request, res: Response) => {
             if (!existingProfile) {
                 await client.query(
                     `INSERT INTO user_profiles (
-                        user_id, bio, is_expert, profession, specialization, 
+                        user_id, bio, birthday, is_expert, profession, specialization, 
                         experience_years, service_price, working_hours, languages,
                         wiloyat, tuman, verified_status, specialization_details,
                         has_diploma, institution, current_workplace, diploma_url,
                         certificate_url, id_url, selfie_url, hourly_rate, currency,
                         service_languages, service_format, bio_expert, specialty_desc,
                         services_json
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)`,
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
                     [
-                        userId, bio || '', is_expert || false, profession || '', specialization || '',
+                        userId, bio || '', birthday || null, is_expert || false, profession || '', specialization || '',
                         experience_years || 0, service_price || 0, working_hours || '', languages || '',
                         wiloyat || '', tuman || '', is_expert ? 'pending' : 'none',
                         specialization_details || '', has_diploma || false, institution || '',
@@ -163,34 +175,35 @@ export const updateProfile = async (req: Request, res: Response) => {
                 await client.query(
                     `UPDATE user_profiles SET 
                         bio = COALESCE($1, bio),
-                        is_expert = COALESCE($2, is_expert),
-                        profession = COALESCE($3, profession),
-                        specialization = COALESCE($4, specialization),
-                        experience_years = COALESCE($5, experience_years),
-                        service_price = COALESCE($6, service_price),
-                        working_hours = COALESCE($7, working_hours),
-                        languages = COALESCE($8, languages),
-                        wiloyat = COALESCE($9, wiloyat),
-                        tuman = COALESCE($10, tuman),
-                        verified_status = $11,
-                        specialization_details = COALESCE($12, specialization_details),
-                        has_diploma = COALESCE($13, has_diploma),
-                        institution = COALESCE($14, institution),
-                        current_workplace = COALESCE($15, current_workplace),
-                        diploma_url = COALESCE($16, diploma_url),
-                        certificate_url = COALESCE($17, certificate_url),
-                        id_url = COALESCE($18, id_url),
-                        selfie_url = COALESCE($19, selfie_url),
-                        hourly_rate = COALESCE($20, hourly_rate),
-                        currency = COALESCE($21, currency),
-                        service_languages = COALESCE($22, service_languages),
-                        service_format = COALESCE($23, service_format),
-                        bio_expert = COALESCE($24, bio_expert),
-                        specialty_desc = COALESCE($25, specialty_desc),
-                        services_json = COALESCE($26, services_json)
-                    WHERE user_id = $27`,
+                        birthday = COALESCE($2, birthday),
+                        is_expert = COALESCE($3, is_expert),
+                        profession = COALESCE($4, profession),
+                        specialization = COALESCE($5, specialization),
+                        experience_years = COALESCE($6, experience_years),
+                        service_price = COALESCE($7, service_price),
+                        working_hours = COALESCE($8, working_hours),
+                        languages = COALESCE($9, languages),
+                        wiloyat = COALESCE($10, wiloyat),
+                        tuman = COALESCE($11, tuman),
+                        verified_status = $12,
+                        specialization_details = COALESCE($13, specialization_details),
+                        has_diploma = COALESCE($14, has_diploma),
+                        institution = COALESCE($15, institution),
+                        current_workplace = COALESCE($16, current_workplace),
+                        diploma_url = COALESCE($17, diploma_url),
+                        certificate_url = COALESCE($18, certificate_url),
+                        id_url = COALESCE($19, id_url),
+                        selfie_url = COALESCE($20, selfie_url),
+                        hourly_rate = COALESCE($21, hourly_rate),
+                        currency = COALESCE($22, currency),
+                        service_languages = COALESCE($23, service_languages),
+                        service_format = COALESCE($24, service_format),
+                        bio_expert = COALESCE($25, bio_expert),
+                        specialty_desc = COALESCE($26, specialty_desc),
+                        services_json = COALESCE($27, services_json)
+                    WHERE user_id = $28`,
                     [
-                        bio, is_expert, profession, specialization,
+                        bio, birthday || null, is_expert, profession, specialization,
                         experience_years, service_price, working_hours, languages,
                         wiloyat, tuman, newVerifiedStatus, specialization_details,
                         has_diploma, institution, current_workplace, diploma_url,
@@ -212,7 +225,9 @@ export const updateProfile = async (req: Request, res: Response) => {
                     avatar_url: avatar_url,
                     name: name,
                     surname: surname,
-                    username: username
+                    username: username,
+                    bio: bio,
+                    birthday: birthday
                 });
             }
 
@@ -356,6 +371,7 @@ export const getContacts = async (req: Request, res: Response) => {
 };
 
 export const removeContact = async (req: Request, res: Response) => {
+    const client = await pool.connect();
     try {
         // @ts-ignore
         const userId = req.user.id;
@@ -363,15 +379,147 @@ export const removeContact = async (req: Request, res: Response) => {
 
         if (!contactId) return res.status(400).json({ message: 'Contact user ID is required' });
 
-        await pool.query(
-            'DELETE FROM user_contacts WHERE user_id = $1 AND contact_user_id = $2',
+        await client.query('BEGIN');
+
+        // 1. Find private chat between these two
+        const chatRes = await client.query(`
+            SELECT c.id FROM chats c
+            JOIN chat_participants p1 ON c.id = p1.chat_id
+            JOIN chat_participants p2 ON c.id = p2.chat_id
+            WHERE c.type = 'private' AND p1.user_id = $1 AND p2.user_id = $2
+        `, [userId, contactId]);
+
+        if (chatRes.rows.length > 0) {
+            const chatId = chatRes.rows[0].id;
+            // 2. Delete chat (This will CASCADE to messages and participants due to schema)
+            await client.query('DELETE FROM chats WHERE id = $1', [chatId]);
+
+            // Optionally notify via Socket.io
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('chat_deleted', { chatId, participants: [userId, contactId] });
+            }
+            console.log(`[removeContact] Mutual chat ${chatId} deleted for ${userId} and ${contactId}`);
+        }
+
+        // 3. Delete from user_contacts for BOTH users (Mutual deletion)
+        await client.query(
+            'DELETE FROM user_contacts WHERE (user_id = $1 AND contact_user_id = $2) OR (user_id = $2 AND contact_user_id = $1)',
             [userId, contactId]
         );
 
-        console.log(`[removeContact] User ${userId} removed contact ${contactId}`);
-        res.status(200).json({ message: 'Kontakt muvaffaqiyatli o\'chirildi' });
+        await client.query('COMMIT');
+        console.log(`[removeContact] User ${userId} mutually removed contact ${contactId}`);
+        res.status(200).json({ message: 'Kontakt va barcha yozishmalar ikkala tomon uchun ham o\'chirildi' });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error('Remove Contact Error:', err);
-        res.status(500).json({ message: 'Kontaktni o\'chirishda xato yuz berdi' });
+        res.status(500).json({ message: 'Kontaktni o\'chirishda xatolik yuz berdi' });
+    } finally {
+        client.release();
+    }
+};
+
+export const blockUser = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const userId = req.user.id;
+        const { targetId } = req.body;
+        if (!targetId) return res.status(400).json({ message: 'Target user ID is required' });
+
+        await pool.query(
+            'INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [userId, targetId]
+        );
+        res.json({ message: 'Foydalanuvchi bloklandi' });
+    } catch (e) {
+        console.error('Block User Error:', e);
+        res.status(500).json({ message: 'Bloklashda xatolik' });
+    }
+};
+
+export const unblockUser = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const userId = req.user.id;
+        const { targetId } = req.body;
+        if (!targetId) return res.status(400).json({ message: 'Target user ID is required' });
+
+        await pool.query(
+            'DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2',
+            [userId, targetId]
+        );
+        res.json({ message: 'Blokdan chiqarildi' });
+    } catch (e) {
+        console.error('Unblock User Error:', e);
+        res.status(500).json({ message: 'Blokdan chiqarishda xatolik' });
+    }
+};
+
+export const updateContact = async (req: Request, res: Response) => {
+    try {
+        // @ts-ignore
+        const userId = req.user.id;
+        const { contactUserId, name, surname } = req.body;
+        if (!contactUserId) return res.status(400).json({ message: 'Contact user ID is required' });
+
+        await pool.query(`
+            UPDATE user_contacts 
+            SET custom_name = $1, custom_surname = $2 
+            WHERE user_id = $3 AND contact_user_id = $4
+        `, [name, surname, userId, contactUserId]);
+
+        res.json({ message: 'Kontakt ma\'lumotlari yangilandi' });
+    } catch (e) {
+        console.error('Update Contact Error:', e);
+        res.status(500).json({ message: 'Kontaktni tahrirlashda xatolik' });
+    }
+};
+
+export const getChatStats = async (req: Request, res: Response) => {
+    try {
+        const { chatId } = req.params;
+        // @ts-ignore
+        const userId = req.user.id;
+
+        // 1. Link count (Search for http/https in content) - Simple regex
+        const linksRes = await pool.query(`
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = $1 AND (content ILIKE '%http://%' OR content ILIKE '%https://%')
+        `, [chatId]);
+
+        // 2. Voice messages count
+        const voiceRes = await pool.query(`
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = $1 AND type = 'voice'
+        `, [chatId]);
+
+        // 3. Common groups count
+        const otherParticipantRes = await pool.query(`
+            SELECT user_id FROM chat_participants 
+            WHERE chat_id = $1 AND user_id != $2
+        `, [chatId, userId]);
+
+        let commonGroupsCount = 0;
+        if (otherParticipantRes.rows.length > 0) {
+            const otherUserId = otherParticipantRes.rows[0].user_id;
+            const groupsRes = await pool.query(`
+                SELECT COUNT(DISTINCT c.id) as count
+                FROM chats c
+                JOIN chat_participants p1 ON c.id = p1.chat_id
+                JOIN chat_participants p2 ON c.id = p2.chat_id
+                WHERE c.type = 'group' AND p1.user_id = $1 AND p2.user_id = $2
+            `, [userId, otherUserId]);
+            commonGroupsCount = parseInt(groupsRes.rows[0].count);
+        }
+
+        res.json({
+            linksCount: parseInt(linksRes.rows[0].count),
+            voiceCount: parseInt(voiceRes.rows[0].count),
+            commonGroupsCount: commonGroupsCount
+        });
+    } catch (e) {
+        console.error('Get Chat Stats Error:', e);
+        res.status(500).json({ message: 'Statistikani olishda xatolik' });
     }
 };
