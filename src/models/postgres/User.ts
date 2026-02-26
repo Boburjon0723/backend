@@ -42,6 +42,7 @@ export interface User {
     specialty_desc?: string;
     services_json?: string; // JSON string
     resume_url?: string;
+    refresh_token?: string | null;
 }
 
 export const UserModel = {
@@ -89,6 +90,7 @@ export const UserModel = {
             addUserField('age');
             addUserField('username');
             addUserField('email');
+            addUserField('refresh_token', 'refresh_token');
 
             if (data.avatar_url !== undefined) {
                 userFields.push(`avatar_url = $${uIdx++}`);

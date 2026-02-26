@@ -5,10 +5,15 @@ import { SocketService } from './socket/socket.service';
 import dotenv from 'dotenv';
 import { pool } from './config/database';
 
+import { globalLimiter } from './middleware/rateLimit.middleware';
+
 dotenv.config();
 
 const PORT = process.env.PORT || 4000;
 const server = http.createServer(app);
+
+// Global Rate Limiting
+app.use(globalLimiter);
 
 // Initialize Socket.IO
 const io = new Server(server, {
@@ -104,6 +109,7 @@ const runAutoMigration = async () => {
                 BEGIN ALTER TABLE jobs ADD COLUMN salary_text VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE jobs ADD COLUMN benefits_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE jobs ADD COLUMN apply_method_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE users ADD COLUMN refresh_token TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
             END $$;
         `;
         await pool.query(sql);
