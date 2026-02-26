@@ -68,7 +68,7 @@ const runAutoMigration = async () => {
                     INSERT INTO job_categories (name_uz, name_ru, icon, publication_price_mali) VALUES
                     ('Huquqshunos (Yurist)', 'Юрист', 'Gavel', 150.0000),
                     ('Psixolog', 'Психолог', 'HeartPulse', 100.0000),
-                    ('Repetitor (O'qituvchi)', 'Репетитор', 'GraduationCap', 50.0000),
+                    ('Repetitor (O''qituvchi)', 'Репетитор', 'GraduationCap', 50.0000),
                     ('Santexnik', 'Сантехник', 'Wrench', 30.0000),
                     ('Elektrik', 'Электрик', 'Zap', 30.0000),
                     ('Usta (Remontchi)', 'Мастер по ремонту', 'Hammer', 30.0000),
