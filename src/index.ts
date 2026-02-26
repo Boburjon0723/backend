@@ -68,7 +68,7 @@ const runAutoMigration = async () => {
                     INSERT INTO job_categories (name_uz, name_ru, icon, publication_price_mali) VALUES
                     ('Huquqshunos (Yurist)', 'Юрист', 'Gavel', 150.0000),
                     ('Psixolog', 'Психолог', 'HeartPulse', 100.0000),
-                    ('Repetitor (O‘qituvchi)', 'Репетитор', 'GraduationCap', 50.0000),
+                    ('Repetitor (O'qituvchi)', 'Репетитор', 'GraduationCap', 50.0000),
                     ('Santexnik', 'Сантехник', 'Wrench', 30.0000),
                     ('Elektrik', 'Электрик', 'Zap', 30.0000),
                     ('Usta (Remontchi)', 'Мастер по ремонту', 'Hammer', 30.0000),
@@ -108,10 +108,44 @@ const runAutoMigration = async () => {
         `;
         await pool.query(sql);
         console.log('Auto-migration completed successfully.');
+
+        // ========== DATABASE INDEXES ==========
+        console.log('Creating database indexes...');
+        const indexSql = `
+            -- Messages: chat xabarlarini tezkor yuklash
+            CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages(chat_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
+
+            -- Transactions: tranzaksiya tarixini tezkor filtrlash
+            CREATE INDEX IF NOT EXISTS idx_transactions_sender_created ON transactions(sender_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_transactions_receiver ON transactions(receiver_id);
+            CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+            CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at DESC);
+
+            -- Chats: chat turini filtrlash
+            CREATE INDEX IF NOT EXISTS idx_chats_type ON chats(type);
+
+            -- Chat Participants: user chatlarini topish
+            CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(user_id);
+
+            -- Escrow: user escrow larini topish
+            CREATE INDEX IF NOT EXISTS idx_escrow_user ON escrow(user_id);
+            CREATE INDEX IF NOT EXISTS idx_escrow_status ON escrow(status);
+
+            -- Services: provider xizmatlarini topish
+            CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id);
+
+            -- User Contacts: kontaktlarni yuklash
+            CREATE INDEX IF NOT EXISTS idx_user_contacts_user ON user_contacts(user_id);
+        `;
+        await pool.query(indexSql);
+        console.log('Database indexes created successfully.');
+
     } catch (error) {
         console.error('Auto-migration failed (this is non-critical if columns exist):', error);
     }
 };
+
 
 const startServer = async () => {
     try {
