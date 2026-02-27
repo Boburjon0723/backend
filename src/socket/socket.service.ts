@@ -138,6 +138,13 @@ export class SocketService {
                 this.io.to(data.to).emit('call_ended', { from: authSocket.user.id });
             });
 
+            authSocket.on('call_signal', (data: { to: string, signal: any }) => {
+                this.io.to(data.to).emit('call_signal', {
+                    signal: data.signal,
+                    from: authSocket.user.id
+                });
+            });
+
             // Typing Indicators
             authSocket.on('typing', (roomId: string) => {
                 authSocket.to(roomId).emit('typing', { senderId: authSocket.user.id, roomId });
