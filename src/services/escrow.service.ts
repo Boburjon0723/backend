@@ -8,9 +8,9 @@ export class EscrowService {
     private static COMMISSION_RATE = parseFloat(process.env.SERVICE_COMMISSION_PERCENTAGE || '0.05'); // 5%
 
     /**
-     * Hold funds for a service (Client -> Escrow)
+     * Hold funds for a service or session (Client -> Escrow)
      */
-    static async holdFunds(userId: string, serviceId: string, amount: number) {
+    static async holdFunds(userId: string, amount: number, reference: { serviceId?: string, bookingId?: string, sessionId?: string }) {
         const client = await pool.connect();
 
         try {
@@ -30,31 +30,33 @@ export class EscrowService {
             // 2. Deduct from Available, Add to Locked
             await client.query(
                 `UPDATE token_balances 
-         SET balance = balance - $1, 
-             locked_balance = locked_balance + $1 
-         WHERE user_id = $2`,
+                 SET balance = balance - $1, 
+                     locked_balance = locked_balance + $1 
+                 WHERE user_id = $2`,
                 [amount, userId]
             );
 
             // 3. Create Escrow Record
             const escrow = await EscrowModel.create(client, {
                 user_id: userId,
-                service_id: serviceId,
-                amount: amount
+                service_id: reference.serviceId,
+                booking_id: reference.bookingId,
+                amount: amount,
+                metadata: { session_id: reference.sessionId }
             });
 
             // 4. Create Transaction Record (Escrow Hold)
             await TransactionModel.create(client, {
                 sender_id: userId,
-                receiver_id: userId, // Self-reference for hold or system account
+                receiver_id: null, // Held by system
                 amount: amount,
                 fee: 0,
                 net_amount: amount,
-                type: 'escrow_hold', // Ensure this type is in Transaction types definition
+                type: 'escrow_hold',
                 status: 'completed',
-                reference_type: 'escrow',
-                reference_id: escrow.id,
-                note: `Funds held for service ${serviceId}`
+                reference_type: reference.sessionId ? 'session' : (reference.bookingId ? 'booking' : 'service'),
+                reference_id: reference.sessionId || reference.bookingId || reference.serviceId,
+                note: `Funds held for ${reference.sessionId ? 'session' : 'service'}`
             });
 
             await client.query('COMMIT');
@@ -84,12 +86,21 @@ export class EscrowService {
             if (!escrow) throw new Error('Escrow record not found');
             if (escrow.status !== 'held') throw new Error(`Escrow status is ${escrow.status}, cannot release`);
 
-            // 2. Get Service details to find provider
-            const serviceRes = await client.query('SELECT provider_id FROM services WHERE id = $1', [escrow.service_id]);
-            const service = serviceRes.rows[0];
-            if (!service) throw new Error('Service not found');
+            // 2. Determine Provider
+            let providerId: string | null = null;
+            if (escrow.booking_id) {
+                const bookingRes = await client.query('SELECT provider_id FROM bookings WHERE id = $1', [escrow.booking_id]);
+                providerId = bookingRes.rows[0]?.provider_id;
+            } else if (escrow.metadata?.session_id) {
+                const sessionRes = await client.query('SELECT expert_id FROM service_sessions WHERE id = $1', [escrow.metadata.session_id]);
+                providerId = sessionRes.rows[0]?.expert_id;
+            } else if (escrow.service_id) {
+                const serviceRes = await client.query('SELECT provider_id FROM services WHERE id = $1', [escrow.service_id]);
+                providerId = serviceRes.rows[0]?.provider_id;
+            }
 
-            const isProvider = true; // Assuming we want to release to provider
+            if (!providerId) throw new Error('Provider not found for escrow release');
+
             const amount = parseFloat(escrow.amount);
             const commission = amount * this.COMMISSION_RATE;
             const netAmount = amount - commission;
@@ -103,27 +114,27 @@ export class EscrowService {
             // Now we permanently remove them from Payer.
             await client.query(
                 `UPDATE token_balances 
-           SET locked_balance = locked_balance - $1,
-               lifetime_spent = lifetime_spent + $1
-           WHERE user_id = $2`,
+                 SET locked_balance = locked_balance - $1,
+                     lifetime_spent = lifetime_spent + $1
+                 WHERE user_id = $2`,
                 [amount, escrow.user_id]
             );
 
             // 4. Credit Provider
             await client.query(
                 `UPDATE token_balances 
-           SET balance = balance + $1, 
-               lifetime_earned = lifetime_earned + $1 
-           WHERE user_id = $2`,
-                [netAmount, service.provider_id]
+                 SET balance = balance + $1, 
+                     lifetime_earned = lifetime_earned + $1 
+                 WHERE user_id = $2`,
+                [netAmount, providerId]
             );
 
             // 5. Credit Platform
             await client.query(
                 `UPDATE platform_balance 
-           SET balance = balance + $1, 
-               total_commissions_collected = total_commissions_collected + $1 
-           WHERE id = 1`,
+                 SET balance = balance + $1, 
+                     total_commissions_collected = total_commissions_collected + $1 
+                 WHERE id = 1`,
                 [commission]
             );
 
@@ -133,7 +144,7 @@ export class EscrowService {
             // 7. Create Transaction Record (Escrow Release)
             await TransactionModel.create(client, {
                 sender_id: escrow.user_id,
-                receiver_id: service.provider_id,
+                receiver_id: providerId,
                 amount: amount,
                 fee: commission,
                 net_amount: netAmount,
@@ -141,7 +152,7 @@ export class EscrowService {
                 status: 'completed',
                 reference_type: 'escrow',
                 reference_id: escrowId,
-                note: `Funds released for service ${escrow.service_id}`
+                note: `Funds released for ${escrow.booking_id ? 'booking' : 'session'}`
             });
 
             await client.query('COMMIT');

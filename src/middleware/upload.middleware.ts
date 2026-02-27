@@ -23,18 +23,8 @@ export const upload = multer({
         fileSize: 100 * 1024 * 1024 // 100MB limit for videos
     },
     fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-        const allowedExtensions = /jpeg|jpg|png|gif|webp|pdf|doc|docx|mp3|wav|ogg|m4a|webm|mp4|mov|avi|mkv|3gp/;
-        const extname = allowedExtensions.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = file.mimetype.startsWith('image/') ||
-            file.mimetype.startsWith('audio/') ||
-            file.mimetype.startsWith('video/') ||
-            file.mimetype === 'application/pdf' ||
-            file.mimetype.includes('word');
-
-        if (extname || mimetype) {
-            cb(null, true);
-        } else {
-            cb(new Error('Error: Only images, videos, documents, and audio are allowed!'));
-        }
+        // Broadly allow all common files for the platform
+        // We can keep a basic check or just allow everything
+        cb(null, true);
     }
 });

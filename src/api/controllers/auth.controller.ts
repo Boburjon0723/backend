@@ -74,7 +74,9 @@ export const login = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Phone and password are required' });
         }
 
+        console.log(`[AUTH] Login attempt for phone: ${phone}`);
         const user = await UserModel.findByPhone(phone);
+        console.log(`[AUTH] User lookup result: ${user ? 'FOUND' : 'NOT FOUND'}`);
         if (!user) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }

@@ -35,5 +35,28 @@ export const MessageModel = {
         `;
         const result = await pool.query(query, [chatId]);
         return result.rows;
+    },
+
+    async searchMessages(chatId: string, queryText: string): Promise<Message[]> {
+        const query = `
+            SELECT m.*, u.name as sender_name 
+            FROM messages m
+            LEFT JOIN users u ON m.sender_id = u.id
+            WHERE m.chat_id = $1 AND m.content ILIKE $2
+            ORDER BY m.created_at DESC
+        `;
+        const result = await pool.query(query, [chatId, `%${queryText}%`]);
+        return result.rows;
+    },
+
+    async deleteByChatId(chatId: string): Promise<void> {
+        const query = `DELETE FROM messages WHERE chat_id = $1`;
+        await pool.query(query, [chatId]);
+    },
+
+    async deleteByIds(chatId: string, messageIds: string[]): Promise<void> {
+        if (!messageIds || messageIds.length === 0) return;
+        const query = `DELETE FROM messages WHERE chat_id = $1 AND id = ANY($2::uuid[])`;
+        await pool.query(query, [chatId, messageIds]);
     }
 };

@@ -112,11 +112,12 @@ const runAutoMigration = async () => {
                 BEGIN ALTER TABLE users ADD COLUMN refresh_token TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
             END $$;
         `;
+        console.log('>>> Executing main migration SQL...');
         await pool.query(sql);
-        console.log('Auto-migration completed successfully.');
+        console.log('✅ Main migration SQL executed successfully.');
 
         // ========== DATABASE INDEXES ==========
-        console.log('Creating database indexes...');
+        console.log('>>> Creating database indexes...');
         const indexSql = `
             -- Messages: chat xabarlarini tezkor yuklash
             CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages(chat_id, created_at DESC);
@@ -144,8 +145,9 @@ const runAutoMigration = async () => {
             -- User Contacts: kontaktlarni yuklash
             CREATE INDEX IF NOT EXISTS idx_user_contacts_user ON user_contacts(user_id);
         `;
+        console.log('>>> Executing index SQL...');
         await pool.query(indexSql);
-        console.log('Database indexes created successfully.');
+        console.log('✅ Database indexes created successfully.');
 
     } catch (error) {
         console.error('Auto-migration failed (this is non-critical if columns exist):', error);
@@ -155,12 +157,25 @@ const runAutoMigration = async () => {
 
 const startServer = async () => {
     try {
-        await runAutoMigration();
+        console.log('--- Server Start Sequence Initiated ---');
+        console.log('Environment:', process.env.NODE_ENV);
+        console.log('Port:', PORT);
+
+        // Run migrations in background to prevent blocking server startup
+        runAutoMigration().then(() => {
+            console.log('✅ Background auto-migration completed.');
+        }).catch(err => {
+            console.error('❌ Background auto-migration failed:', err);
+        });
+
+        console.log('Attempting to start server listener...');
         server.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
+            console.log(`✅ Server is now LISTENING on port ${PORT}`);
+            console.log(`API URL: http://localhost:${PORT}`);
+            console.log('---------------------------------------');
         });
     } catch (error) {
-        console.error('Failed to start server:', error);
+        console.error('❌ Failed to start server:', error);
         process.exit(1);
     }
 };

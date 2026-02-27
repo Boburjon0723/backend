@@ -67,9 +67,9 @@ export class SocketService {
                 console.log(`User ${authSocket.user.id} joined room ${roomId}`);
             });
 
-            authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string }) => {
+            authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string, clientSideId?: string }) => {
                 try {
-                    const { roomId, content, type } = data;
+                    const { roomId, content, type, clientSideId } = data;
 
                     // Mutual Block Guard for Private Chats
                     const chatRes = await pool.query(`SELECT type FROM chats WHERE id = $1`, [roomId]);
@@ -99,8 +99,9 @@ export class SocketService {
                     this.io.to(roomId).emit('receive_message', {
                         ...savedMessage,
                         roomId: roomId,  // Explicit roomId for frontend matching
+                        clientSideId: clientSideId // ECHO BACK FOR DEDUPLICATION
                     });
-                    console.log(`[Socket] Broadcasted to room: ${roomId}`);
+                    console.log(`[Socket] Broadcasted to room: ${roomId} with clientSideId: ${clientSideId}`);
 
                     // 3. Bot Logic check
                     if (content.startsWith('/')) {
@@ -111,6 +112,30 @@ export class SocketService {
                     console.error('Send message error:', error);
                     authSocket.emit('error', { message: 'Failed to send message' });
                 }
+            });
+
+            // Calling Signaling
+            authSocket.on('call_user', (data: { targetUserId: string, signal: any, fromName: string }) => {
+                this.io.to(data.targetUserId).emit('incoming_call', {
+                    signal: data.signal,
+                    from: authSocket.user.id,
+                    fromName: data.fromName
+                });
+            });
+
+            authSocket.on('accept_call', (data: { to: string, signal: any }) => {
+                this.io.to(data.to).emit('call_accepted', {
+                    signal: data.signal,
+                    from: authSocket.user.id
+                });
+            });
+
+            authSocket.on('reject_call', (data: { to: string }) => {
+                this.io.to(data.to).emit('call_rejected', { from: authSocket.user.id });
+            });
+
+            authSocket.on('end_call', (data: { to: string }) => {
+                this.io.to(data.to).emit('call_ended', { from: authSocket.user.id });
             });
 
             // Typing Indicators

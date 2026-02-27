@@ -47,9 +47,16 @@ export interface User {
 
 export const UserModel = {
     async findByPhone(phone: string): Promise<User | null> {
+        console.log(`[DB] findByPhone: ${phone}`);
         const query = 'SELECT * FROM users WHERE phone = $1';
-        const result = await pool.query(query, [phone]);
-        return result.rows[0] || null;
+        try {
+            const result = await pool.query(query, [phone]);
+            console.log(`[DB] findByPhone result rows: ${result.rows.length}`);
+            return result.rows[0] || null;
+        } catch (err) {
+            console.error(`[DB] findByPhone error:`, err);
+            throw err;
+        }
     },
 
     async create(phone: string, passwordHash: string, name: string, surname: string, age: number): Promise<User> {

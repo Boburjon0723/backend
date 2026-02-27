@@ -85,7 +85,13 @@ export const ChatModel = {
             (SELECT json_agg(user_id) FROM chat_participants WHERE chat_id = c.id) as participants,
             m.content as "lastMessage",
             m.type as "lastMessageType",
-            m.created_at as "lastMessageAt"
+            m.created_at as "lastMessageAt",
+            (
+                SELECT COUNT(*)::int FROM messages 
+                WHERE chat_id = c.id 
+                AND created_at > cp.last_read_at
+                AND sender_id != $1
+            ) as unread
             FROM chats c
             JOIN chat_participants cp ON c.id = cp.chat_id
             LEFT JOIN LATERAL (
@@ -111,5 +117,28 @@ export const ChatModel = {
                 lastMessage: snippet
             };
         });
+    },
+
+    async markChatAsRead(chatId: string, userId: string): Promise<void> {
+        await pool.query(
+            'UPDATE chat_participants SET last_read_at = NOW() WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+    },
+
+    async deleteChat(chatId: string): Promise<void> {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('DELETE FROM chat_participants WHERE chat_id = $1', [chatId]);
+            await client.query('DELETE FROM messages WHERE chat_id = $1', [chatId]);
+            await client.query('DELETE FROM chats WHERE id = $1', [chatId]);
+            await client.query('COMMIT');
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
     }
 };

@@ -50,7 +50,9 @@ export const createChat = async (req: Request, res: Response) => {
 export const getUserChats = async (req: Request, res: Response) => {
     try {
         const currentUserId = (req as any).user.id;
+        console.log(`[getUserChats] Fetching chats for user: ${currentUserId}`);
         const chats = await ChatModel.findUserChats(currentUserId);
+        console.log(`[getUserChats] Found ${chats.length} chats`);
 
         // Enrich private chats with other user's info
         const enriched = await Promise.all(chats.map(async (chat) => {
@@ -158,3 +160,97 @@ export const getCommunities = async (req: Request, res: Response) => {
 export const joinCommunity = async (req: Request, res: Response) => {
     res.status(501).json({ message: 'Not implemented yet' });
 };
+export const searchMessages = async (req: Request, res: Response) => {
+    try {
+        const { chatId } = req.params;
+        const { q } = req.query;
+
+        if (!q) return res.status(200).json([]);
+
+        const query: string = typeof q === 'string' ? q : (Array.isArray(q) ? String(q[0]) : '');
+        const messages = await MessageModel.searchMessages(String(chatId), query as string);
+        res.status(200).json(messages);
+    } catch (error) {
+        console.error('Search Messages Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const clearMessages = async (req: Request, res: Response) => {
+    try {
+        const { chatId } = req.params;
+        const currentUserId = (req as any).user.id;
+
+        const chat = await ChatModel.findById(chatId as string);
+        if (!chat) return res.status(404).json({ message: 'Chat not found' });
+
+        // Verify user is participant
+        const userChats = await ChatModel.findUserChats(currentUserId);
+        if (!userChats.some(c => c.id === chatId)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        await MessageModel.deleteByChatId(chatId as string);
+        res.status(200).json({ message: 'History cleared' });
+    } catch (error) {
+        console.error('Clear Messages Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const deleteChatEndpoint = async (req: Request, res: Response) => {
+    try {
+        const { chatId } = req.params;
+        const currentUserId = (req as any).user.id;
+
+        const chat = await ChatModel.findById(chatId as string);
+        if (!chat) return res.status(404).json({ message: 'Chat not found' });
+
+        const userChats = await ChatModel.findUserChats(currentUserId);
+        if (!userChats.some(c => c.id === chatId)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        await ChatModel.deleteChat(chatId as string);
+        res.status(200).json({ message: 'Chat deleted' });
+    } catch (error) {
+        console.error('Delete Chat Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const deleteMessagesBulk = async (req: Request, res: Response) => {
+    try {
+        const { chatId } = req.params;
+        const { messageIds } = req.body;
+        const currentUserId = (req as any).user.id;
+
+        const chat = await ChatModel.findById(chatId as string);
+        if (!chat) return res.status(404).json({ message: 'Chat not found' });
+
+        const userChats = await ChatModel.findUserChats(currentUserId);
+        if (!userChats.some(c => c.id === chatId)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        await MessageModel.deleteByIds(chatId as string, messageIds);
+        res.status(200).json({ message: 'Messages deleted' });
+    } catch (error) {
+        console.error('Delete Messages Bulk Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const markAsRead = async (req: Request, res: Response) => {
+    try {
+        const { chatId } = req.params;
+        const currentUserId = (req as any).user.id;
+
+        await ChatModel.markChatAsRead(chatId as string, currentUserId);
+        res.status(200).json({ message: 'Chat marked as read' });
+    } catch (error) {
+        console.error('Mark As Read Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
