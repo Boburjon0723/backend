@@ -7,7 +7,10 @@ import {
     updateUserStatus,
     getAllTransactions,
     getPendingExperts,
-    verifyExpert
+    getVerifiedExperts,
+    verifyExpert,
+    getPlatformSettings,
+    updatePlatformSettings
 } from '../controllers/admin.controller';
 import { authenticateToken, requireAdmin } from '../../middleware/auth.middleware';
 
@@ -26,6 +29,10 @@ router.post('/users/status', updateUserStatus);
 router.get('/transactions', getAllTransactions);
 
 router.get('/experts/pending', getPendingExperts);
+router.get('/experts/verified', getVerifiedExperts);
 router.post('/experts/verify', verifyExpert);
+
+router.get('/settings', getPlatformSettings);
+router.put('/settings', updatePlatformSettings);
 
 export default router;

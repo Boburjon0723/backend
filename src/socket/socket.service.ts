@@ -67,9 +67,9 @@ export class SocketService {
                 console.log(`User ${authSocket.user.id} joined room ${roomId}`);
             });
 
-            authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string, clientSideId?: string }) => {
+            authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string, clientSideId?: string, caption?: string, size?: number, mimetype?: string, parentId?: string }) => {
                 try {
-                    const { roomId, content, type, clientSideId } = data;
+                    const { roomId, content, type, clientSideId, caption, size, mimetype, parentId } = data;
 
                     // Mutual Block Guard for Private Chats
                     const chatRes = await pool.query(`SELECT type FROM chats WHERE id = $1`, [roomId]);
@@ -90,7 +90,13 @@ export class SocketService {
                         authSocket.user.id,
                         content,
                         type || 'text',
-                        { senderName: authSocket.user.name || authSocket.user.phone || "Unknown User" }
+                        {
+                            senderName: authSocket.user.name || authSocket.user.phone || "Unknown User",
+                            caption: caption,
+                            size: size,
+                            mimetype: mimetype
+                        },
+                        parentId
                     );
                     console.log(`[Socket] Saved message to Postgres DB:`, savedMessage.id, `Room: ${roomId}`);
 
@@ -145,13 +151,75 @@ export class SocketService {
                 });
             });
 
-            // Typing Indicators
             authSocket.on('typing', (roomId: string) => {
                 authSocket.to(roomId).emit('typing', { senderId: authSocket.user.id, roomId });
             });
 
             authSocket.on('stop_typing', (roomId: string) => {
                 authSocket.to(roomId).emit('stop_typing', { senderId: authSocket.user.id, roomId });
+            });
+
+            // Live Session Chat System
+            authSocket.on('session_chat:send', async (data: { sessionId: string, receiverId?: string, content: string, fileUrl?: string, type?: string }) => {
+                try {
+                    const { sessionId, receiverId, content, fileUrl, type } = data;
+                    const { ChatModel } = await import('../models/postgres/LiveSession');
+
+                    const savedMessage = await ChatModel.saveMessage(
+                        sessionId,
+                        authSocket.user.id,
+                        receiverId || null,
+                        content,
+                        fileUrl || null,
+                        type || 'text'
+                    );
+
+                    // Attach user info for frontend rendering
+                    const broadcastMsg = {
+                        ...savedMessage,
+                        sender_name: authSocket.user.name || 'User',
+                        sender_avatar: authSocket.user.avatar_url || null
+                    };
+
+                    // Broadcast to specific receiver or entire room
+                    if (receiverId) {
+                        this.io.to(receiverId).emit('session_chat:receive', broadcastMsg);
+                        authSocket.emit('session_chat:receive', broadcastMsg); // echo to sender
+                    } else {
+                        this.io.to(sessionId).emit('session_chat:receive', broadcastMsg);
+                    }
+                } catch (error) {
+                    console.error('Session chat error:', error);
+                    authSocket.emit('error', { message: 'Failed to send session chat' });
+                }
+            });
+
+            // Material Sharing in Sessions
+            authSocket.on('material_uploaded', (data: { sessionId: string, material: any }) => {
+                // Broadcast to everyone in the room except the uploader, or to everyone including the uploader
+                // (Depends on frontend logic, we emit to the entire room)
+                console.log(`[Socket] Material uploaded in session ${data.sessionId}: ${data.material?.title}`);
+                this.io.to(data.sessionId).emit('material_new', data.material);
+            });
+
+            // Live Quiz System
+            authSocket.on('quiz_start', (data: { sessionId: string, quizId: string, quizDetails: any }) => {
+                console.log(`[Socket] Quiz Started in session ${data.sessionId}: ${data.quizId}`);
+                // Broadcast the quiz to all attendees
+                this.io.to(data.sessionId).emit('quiz_active', {
+                    quizId: data.quizId,
+                    quizDetails: data.quizDetails
+                });
+            });
+
+            authSocket.on('quiz_answer', (data: { sessionId: string, quizId: string, answerDetails: any }) => {
+                // Send answer back ONLY to the mentor/room creator or a specific tracking room
+                // For simplicity, we broadcast to the room but handle filtering on frontend, OR
+                // emit a specific `quiz_result_update` that the mentor listens to
+                this.io.to(data.sessionId).emit('quiz_result_update', {
+                    studentId: authSocket.user.id,
+                    ...data
+                });
             });
 
             authSocket.on('update_profile', async (data: { name?: string, username?: string, bio?: string }) => {
@@ -179,6 +247,59 @@ export class SocketService {
                     console.error('Update profile error:', error);
                     authSocket.emit('error', { message: 'Failed to update profile' });
                 }
+            });
+
+            // Breakout Rooms System
+            authSocket.on('breakout:start', async (data: { sessionId: string, numGroups: number }) => {
+                try {
+                    const { sessionId, numGroups } = data;
+
+                    // Get all sockets currently in the main room
+                    const sockets = await this.io.in(sessionId).fetchSockets();
+
+                    // Filter out the mentor/initiator to keep them in main room or allow them to float
+                    const localSockets = sockets.map(s => this.io.sockets.sockets.get(s.id)).filter(s => s !== undefined) as AuthenticatedSocket[];
+                    const studentSockets = localSockets.filter(s => s.user?.id !== authSocket.user.id);
+
+                    // Shuffle students
+                    for (let i = studentSockets.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [studentSockets[i], studentSockets[j]] = [studentSockets[j], studentSockets[i]];
+                    }
+
+                    const assignments: Record<string, string[]> = {};
+                    for (let i = 1; i <= numGroups; i++) {
+                        assignments[`${sessionId}-group-${i}`] = [];
+                    }
+
+                    // Distribute
+                    studentSockets.forEach((s, index) => {
+                        const groupIndex = index % numGroups + 1;
+                        const subRoomId = `${sessionId}-group-${groupIndex}`;
+                        assignments[subRoomId].push(s.user.id);
+
+                        // Notify student
+                        s.emit('breakout:assigned', { subRoomId, mainRoomId: sessionId });
+                    });
+
+                    // Notify mentor of the breakdown mapping
+                    authSocket.emit('breakout:rooms_created', { assignments });
+
+                    // Also notify the entire main room that breakouts have started (UI updates)
+                    this.io.to(sessionId).emit('breakout:active', { numGroups });
+
+                } catch (error) {
+                    console.error('Breakout start error:', error);
+                    authSocket.emit('error', { message: 'Failed to start breakout rooms' });
+                }
+            });
+
+            authSocket.on('breakout:end', (data: { sessionId: string }) => {
+                // Broadcast to the main room (which everyone should ostensibly still be a part of or at least listening to)
+                // Actually, if they left the socket room, they might not hear it. 
+                // But in LiveKit logic, they stay connected to the main Chat Socket room, just change LiveKit Room.
+                // We emit to the main session socket room.
+                this.io.to(data.sessionId).emit('breakout:ended', { mainRoomId: data.sessionId });
             });
 
             // Wallet Real-time Balance Fetch

@@ -17,6 +17,12 @@ import p2pRoutes from './api/routes/p2p.routes';
 import mediaRoutes from './api/routes/media.routes';
 import expenseRoutes from './api/routes/expense.routes';
 import notificationRoutes from './api/routes/notification.routes';
+import specialistRoutes from './api/routes/specialist.routes';
+import uploadRoutes from './api/routes/upload.routes';
+import quizRoutes from './api/routes/quiz.routes';
+import livekitRoutes from './api/routes/livekit.routes';
+import sessionRoutes from './api/routes/session.routes';
+import walletRoutes from './api/routes/wallet.routes';
 
 const app = express();
 
@@ -66,6 +72,12 @@ app.use('/api/p2p', p2pRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/specialists', specialistRoutes);
+app.use('/api', uploadRoutes);
+app.use('/api', quizRoutes);
+app.use('/api', livekitRoutes);
+app.use('/api', sessionRoutes);
+app.use('/api/wallet', walletRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -7,7 +7,7 @@ export interface Transaction {
   amount: number;
   fee: number;
   net_amount: number;
-  type: 'transfer' | 'service_payment' | 'escrow_hold' | 'escrow_release' | 'refund' | 'commission' | 'deposit' | 'withdrawal';
+  type: 'transfer' | 'service_payment' | 'escrow_hold' | 'escrow_release' | 'refund' | 'commission' | 'deposit' | 'withdrawal' | 'subscription' | 'booking';
   status: 'pending' | 'completed' | 'failed' | 'reversed';
   reference_type?: string;
   reference_id?: string;

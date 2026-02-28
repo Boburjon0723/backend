@@ -25,6 +25,27 @@ export const getPendingExperts = async (req: Request, res: Response) => {
     }
 };
 
+export const getVerifiedExperts = async (req: Request, res: Response) => {
+    try {
+        const result = await pool.query(`
+            SELECT u.id, u.name, u.surname, u.email, u.phone, u.username, u.avatar_url,
+                   p.profession, p.specialization, p.specialization_details, p.experience_years, 
+                   p.institution, p.current_workplace, p.hourly_rate, p.currency,
+                   p.has_diploma, p.diploma_url, p.certificate_url, p.id_url, p.selfie_url, p.resume_url,
+                   p.service_languages, p.service_format, p.bio_expert, p.specialty_desc,
+                   p.verified_status, p.created_at as profile_created_at
+            FROM users u
+            JOIN user_profiles p ON u.id = p.user_id
+            WHERE p.verified_status IN ('approved', 'rejected')
+            ORDER BY p.updated_at DESC
+        `);
+        res.status(200).json(result.rows);
+    } catch (error: any) {
+        console.error('Admin Fetch Verified Experts Error:', error.message, error.stack);
+        res.status(500).json({ message: 'Failed to fetch verified experts', error: error.message });
+    }
+};
+
 export const verifyExpert = async (req: Request, res: Response) => {
     try {
         const { userId, status } = req.body; // status: 'approved' | 'rejected'
@@ -203,5 +224,32 @@ export const getAllTransactions = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Admin Fetch Transactions Error:', error.message, error.stack);
         res.status(500).json({ message: 'Failed to fetch transactions', error: error.message });
+    }
+};
+
+// Platform Settings Management
+export const getPlatformSettings = async (req: Request, res: Response) => {
+    try {
+        const result = await pool.query('SELECT * FROM platform_settings ORDER BY id DESC LIMIT 1');
+        const settings = result.rows[0] || { expert_subscription_fee: 20, commission_rate: 0.10 };
+        res.status(200).json(settings);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to fetch settings' });
+    }
+};
+
+export const updatePlatformSettings = async (req: Request, res: Response) => {
+    try {
+        const { expert_subscription_fee, commission_rate } = req.body;
+
+        await pool.query(`
+            UPDATE platform_settings 
+            SET expert_subscription_fee = $1, commission_rate = $2, updated_at = NOW() 
+            WHERE id = 1
+        `, [expert_subscription_fee, commission_rate]);
+
+        res.status(200).json({ message: 'Settings updated successfully' });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Failed to update settings' });
     }
 };
