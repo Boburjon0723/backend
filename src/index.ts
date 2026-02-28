@@ -36,227 +36,211 @@ new SocketService(io);
 
 const runAutoMigration = async () => {
     try {
-        console.log('Running auto-migration...');
-        const sql = `
-            DO $$ 
-            BEGIN 
-                BEGIN ALTER TABLE user_profiles ADD COLUMN specialization_details TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN has_diploma BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN institution VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN current_workplace VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN diploma_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN certificate_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN id_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN selfie_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN resume_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN hourly_rate DECIMAL(20, 4) DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN currency VARCHAR(10) DEFAULT 'MALI'; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN service_languages TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN service_format VARCHAR(100); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN bio_expert TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN specialty_desc TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE user_profiles ADD COLUMN services_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        console.log('>>> Running granular auto-migration...');
 
-                -- Job Board Enhancements
-                CREATE TABLE IF NOT EXISTS job_categories (
-                    id SERIAL PRIMARY KEY,
-                    name_uz VARCHAR(255) NOT NULL,
-                    name_ru VARCHAR(255) NOT NULL,
-                    icon VARCHAR(100),
-                    is_active BOOLEAN DEFAULT TRUE,
-                    publication_price_mali DECIMAL(20, 4) DEFAULT 100.0000,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
+        const runQuery = async (name: string, sql: string) => {
+            try {
+                await pool.query(sql);
+                // console.log(`  [OK] ${name}`);
+            } catch (err: any) {
+                console.error(`  [FAIL] ${name}:`, err.message);
+            }
+        };
 
-                -- Initial categories if none exist
-                IF NOT EXISTS (SELECT 1 FROM job_categories LIMIT 1) THEN
+        // 1. Column Additions (User Profiles)
+        const profileCols = [
+            'specialization_details TEXT', 'has_diploma BOOLEAN DEFAULT FALSE',
+            'institution VARCHAR(255)', 'current_workplace VARCHAR(255)',
+            'diploma_url TEXT', 'certificate_url TEXT', 'id_url TEXT',
+            'selfie_url TEXT', 'resume_url TEXT', 'hourly_rate DECIMAL(20, 4) DEFAULT 0',
+            'currency VARCHAR(10) DEFAULT \'MALI\'', 'service_languages TEXT',
+            'service_format VARCHAR(100)', 'bio_expert TEXT', 'specialty_desc TEXT', 'services_json JSONB'
+        ];
+        for (const col of profileCols) {
+            const colName = col.split(' ')[0];
+            await runQuery(`AddCol_Profile_${colName}`, `ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS ${col}`);
+        }
+
+        // 2. Refresh Token
+        await runQuery('AddCol_User_RefreshToken', 'ALTER TABLE users ADD COLUMN IF NOT EXISTS refresh_token TEXT');
+        await runQuery('AddCol_User_ExpertActive', 'ALTER TABLE users ADD COLUMN IF NOT EXISTS is_expert_active BOOLEAN DEFAULT FALSE');
+        await runQuery('AddCol_User_SubEndDate', 'ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_end_date TIMESTAMP WITH TIME ZONE');
+
+        // 3. Job Categories
+        await runQuery('CreateTable_JobCategories', `
+            CREATE TABLE IF NOT EXISTS job_categories (
+                id SERIAL PRIMARY KEY,
+                name_uz VARCHAR(255) NOT NULL,
+                name_ru VARCHAR(255) NOT NULL,
+                icon VARCHAR(100),
+                is_active BOOLEAN DEFAULT TRUE,
+                publication_price_mali DECIMAL(20, 4) DEFAULT 100.0000,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Check and Seed Job Categories
+        try {
+            const catCheck = await pool.query('SELECT 1 FROM job_categories LIMIT 1');
+            if (catCheck.rows.length === 0) {
+                await runQuery('Seed_JobCategories', `
                     INSERT INTO job_categories (name_uz, name_ru, icon, publication_price_mali) VALUES
                     ('Huquqshunos (Yurist)', 'Юрист', 'Gavel', 150.0000),
                     ('Psixolog', 'Психолог', 'HeartPulse', 100.0000),
                     ('Repetitor (O''qituvchi)', 'Репетитор', 'GraduationCap', 50.0000),
-                    ('Santexnik', 'Сантехник', 'Wrench', 30.0000),
-                    ('Elektrik', 'Электрик', 'Zap', 30.0000),
-                    ('Usta (Remontchi)', 'Мастер по ремонту', 'Hammer', 30.0000),
-                    ('Fotograf / Videograf', 'Фотограф / Видеограф', 'Camera', 80.0000),
-                    ('Avtomobil ustasi', 'Автомастер', 'Car', 40.0000),
-                    ('Buxgalter', 'Бухгалтер', 'Calculator', 120.0000),
-                    ('Hamshira / Qarovchi', 'Медсестра / Сиделка', 'Stethoscope', 40.0000);
-                END IF;
+                    ('Hamshira / Qarovchi', 'Медсестра / Сиделка', 'Stethoscope', 40.0000)
+                `);
+            }
+        } catch (e) { }
 
-                BEGIN ALTER TABLE jobs ADD COLUMN sub_type VARCHAR(20) DEFAULT 'seeker'; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN category_id INTEGER REFERENCES job_categories(id); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN payment_status VARCHAR(20) DEFAULT 'unpaid'; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN publication_fee DECIMAL(20, 4) DEFAULT 0; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN short_text TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN full_name VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN birth_date DATE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN location VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN experience_years INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN salary_min DECIMAL(20, 4); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN is_salary_negotiable BOOLEAN DEFAULT TRUE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN skills_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN has_diploma BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN has_certificate BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN resume_url TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN company_name VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN responsible_person VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN work_type VARCHAR(50); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN work_hours VARCHAR(100); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN day_off VARCHAR(100); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN age_range VARCHAR(50); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN gender_pref VARCHAR(20); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN requirements_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN salary_text VARCHAR(255); EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN benefits_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE jobs ADD COLUMN apply_method_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE users ADD COLUMN refresh_token TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        // 4. Job Board Updates
+        const jobCols = [
+            'sub_type VARCHAR(20) DEFAULT \'seeker\'', 'category_id INTEGER REFERENCES job_categories(id)',
+            'payment_status VARCHAR(20) DEFAULT \'unpaid\'', 'publication_fee DECIMAL(20, 4) DEFAULT 0',
+            'short_text TEXT', 'full_name VARCHAR(255)', 'birth_date DATE', 'location VARCHAR(255)',
+            'experience_years INTEGER', 'salary_min DECIMAL(20, 4)', 'is_salary_negotiable BOOLEAN DEFAULT TRUE',
+            'skills_json JSONB', 'has_diploma BOOLEAN DEFAULT FALSE', 'has_certificate BOOLEAN DEFAULT FALSE',
+            'resume_url TEXT', 'company_name VARCHAR(255)', 'responsible_person VARCHAR(255)',
+            'work_type VARCHAR(50)', 'work_hours VARCHAR(100)', 'day_off VARCHAR(100)',
+            'age_range VARCHAR(50)', 'gender_pref VARCHAR(20)', 'requirements_json JSONB',
+            'salary_text VARCHAR(255)', 'benefits_json JSONB', 'apply_method_json JSONB'
+        ];
+        for (const col of jobCols) {
+            const colName = col.split(' ')[0];
+            await runQuery(`AddCol_Job_${colName}`, `ALTER TABLE jobs ADD COLUMN IF NOT EXISTS ${col}`);
+        }
 
-                -- Phase 5: Wallet & Monetization Extension
-                CREATE TABLE IF NOT EXISTS platform_settings (
-                    id SERIAL PRIMARY KEY,
-                    expert_subscription_fee DECIMAL(10,2) DEFAULT 20.00,
-                    commission_rate DECIMAL(4,2) DEFAULT 0.10,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
+        // 5. Wallet & Platform
+        await runQuery('CreateTable_PlatformSettings', `
+            CREATE TABLE IF NOT EXISTS platform_settings (
+                id SERIAL PRIMARY KEY,
+                expert_subscription_fee DECIMAL(10,2) DEFAULT 20.00,
+                commission_rate DECIMAL(4,2) DEFAULT 0.10,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        // Seed platform settings if empty
+        try {
+            const psCheck = await pool.query('SELECT 1 FROM platform_settings LIMIT 1');
+            if (psCheck.rows.length === 0) {
+                await runQuery('Seed_PlatformSettings', 'INSERT INTO platform_settings (id, expert_subscription_fee, commission_rate) VALUES (1, 20.00, 0.10)');
+            }
+        } catch (e) { }
 
-                IF NOT EXISTS (SELECT 1 FROM platform_settings WHERE id = 1) THEN
-                    INSERT INTO platform_settings (id, expert_subscription_fee, commission_rate) VALUES (1, 20.00, 0.10);
-                END IF;
+        await runQuery('CreateTable_PlatformBalance', `
+            CREATE TABLE IF NOT EXISTS platform_balance (
+                id SERIAL PRIMARY KEY,
+                balance DECIMAL(20, 4) DEFAULT 0.00,
+                total_fees_collected DECIMAL(20, 4) DEFAULT 0.00,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        // Seed platform balance if empty
+        try {
+            const pbCheck = await pool.query('SELECT 1 FROM platform_balance LIMIT 1');
+            if (pbCheck.rows.length === 0) {
+                await runQuery('Seed_PlatformBalance', 'INSERT INTO platform_balance (id, balance, total_fees_collected) VALUES (1, 0.00, 0.00)');
+            }
+        } catch (e) { }
 
-                CREATE TABLE IF NOT EXISTS platform_balance (
-                    id SERIAL PRIMARY KEY,
-                    balance DECIMAL(20, 4) DEFAULT 0.00,
-                    total_fees_collected DECIMAL(20, 4) DEFAULT 0.00,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
+        await runQuery('AddCol_TokenBalance_Locked', 'ALTER TABLE token_balances ADD COLUMN IF NOT EXISTS locked_balance DECIMAL(20, 4) DEFAULT 0.00');
 
-                IF NOT EXISTS (SELECT 1 FROM platform_balance WHERE id = 1) THEN
-                    INSERT INTO platform_balance (id, balance, total_fees_collected) VALUES (1, 0.00, 0.00);
-                END IF;
+        // 6. Specialist & Session Extensions
+        await runQuery('CreateTable_SessionMaterials', `
+            CREATE TABLE IF NOT EXISTS session_materials (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                session_id VARCHAR(255) NOT NULL,
+                uploader_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                file_url TEXT NOT NULL,
+                file_type VARCHAR(50),
+                file_size_bytes BIGINT DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await runQuery('Alter_SessionMaterials_SessionID', 'ALTER TABLE session_materials ALTER COLUMN session_id TYPE VARCHAR(255) USING session_id::text');
 
-                BEGIN ALTER TABLE users ADD COLUMN is_expert_active BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE users ADD COLUMN subscription_end_date TIMESTAMP WITH TIME ZONE; EXCEPTION WHEN duplicate_column THEN NULL; END;
-                BEGIN ALTER TABLE token_balances ADD COLUMN locked_balance DECIMAL(20, 4) DEFAULT 0.00; EXCEPTION WHEN duplicate_column THEN NULL; END;
+        await runQuery('CreateTable_Quizzes', `
+            CREATE TABLE IF NOT EXISTS quizzes (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                session_id VARCHAR(255) NOT NULL,
+                mentor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await runQuery('Alter_Quizzes_SessionID', 'ALTER TABLE quizzes ALTER COLUMN session_id TYPE VARCHAR(255) USING session_id::text');
 
-                -- Specialist Layers: Education,                -- MISSING TABLES FIX
-                CREATE TABLE IF NOT EXISTS session_materials (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    session_id VARCHAR(255) NOT NULL,
-                    uploader_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    title VARCHAR(255) NOT NULL,
-                    file_url TEXT NOT NULL,
-                    file_type VARCHAR(50),
-                    file_size_bytes BIGINT DEFAULT 0,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-                BEGIN ALTER TABLE session_materials ALTER COLUMN session_id TYPE VARCHAR(255) USING session_id::text; EXCEPTION WHEN others THEN NULL; END;
+        // Notification Table
+        await runQuery('CreateTable_Notifications', `
+            CREATE TABLE IF NOT EXISTS notifications (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                type VARCHAR(100) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                message TEXT,
+                data JSONB,
+                is_read BOOLEAN DEFAULT FALSE,
+                read_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
-                CREATE TABLE IF NOT EXISTS quizzes (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    session_id VARCHAR(255) NOT NULL,
-                    mentor_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    title VARCHAR(255) NOT NULL,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-                BEGIN ALTER TABLE quizzes ALTER COLUMN session_id TYPE VARCHAR(255) USING session_id::text; EXCEPTION WHEN others THEN NULL; END;
+        // Sessions Table (Standard)
+        await runQuery('CreateTable_Sessions', `
+            CREATE TABLE IF NOT EXISTS sessions (
+                id VARCHAR(255) PRIMARY KEY,
+                service_id UUID,
+                provider_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                client_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                escrow_id UUID,
+                video_url TEXT,
+                platform VARCHAR(50) DEFAULT 'jitsi',
+                status VARCHAR(50) DEFAULT 'scheduled',
+                started_at TIMESTAMP WITH TIME ZONE,
+                ended_at TIMESTAMP WITH TIME ZONE,
+                duration_seconds INTEGER,
+                metadata JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await runQuery('Alter_Sessions_ID', 'ALTER TABLE sessions ALTER COLUMN id TYPE VARCHAR(255) USING id::text');
 
-                CREATE TABLE IF NOT EXISTS courses (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    title VARCHAR(255) NOT NULL,
-                    description TEXT,
-                    price_mali DECIMAL(20, 4) DEFAULT 0,
-                    is_published BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
+        // Live Sessions (Alternative table used by some features)
+        await runQuery('CreateTable_LiveSessions', `
+            CREATE TABLE IF NOT EXISTS live_sessions (
+                id VARCHAR(255) PRIMARY KEY,
+                mentor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'active',
+                recording_url TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
-                CREATE TABLE IF NOT EXISTS groups (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
-                    name VARCHAR(255) NOT NULL,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
+        await runQuery('CreateTable_ChatMessages', `
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id SERIAL PRIMARY KEY,
+                session_id VARCHAR(255) REFERENCES live_sessions(id) ON DELETE CASCADE,
+                sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                receiver_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                text TEXT,
+                file_url TEXT,
+                type VARCHAR(50) DEFAULT 'text',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
-                CREATE TABLE IF NOT EXISTS specialist_notes (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    specialist_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    patient_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    session_id UUID,
-                    note TEXT,
-                    is_private BOOLEAN DEFAULT TRUE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
+        // Indexing
+        console.log('>>> Applying database indexing...');
+        await runQuery('Idx_Msg_Created', 'CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages(chat_id, created_at DESC)');
+        await runQuery('Idx_Tx_Sender', 'CREATE INDEX IF NOT EXISTS idx_transactions_sender_created ON transactions(sender_id, created_at DESC)');
+        await runQuery('Idx_Tx_Receiver', 'CREATE INDEX IF NOT EXISTS idx_transactions_receiver ON transactions(receiver_id)');
+        await runQuery('Idx_Notif_User', 'CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)');
 
-                CREATE TABLE IF NOT EXISTS case_folders (
-                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                    lawyer_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    client_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    title VARCHAR(255) NOT NULL,
-                    status VARCHAR(50) DEFAULT 'open',
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-
-                -- Live Sessions & Chat
-                CREATE TABLE IF NOT EXISTS live_sessions (
-                    id VARCHAR(255) PRIMARY KEY,
-                    mentor_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    title VARCHAR(255),
-                    status VARCHAR(50) DEFAULT 'active',
-                    recording_url TEXT,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS chat_messages (
-                    id SERIAL PRIMARY KEY,
-                    session_id VARCHAR(255) REFERENCES live_sessions(id) ON DELETE CASCADE,
-                    sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    receiver_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    text TEXT,
-                    file_url TEXT,
-                    type VARCHAR(50) DEFAULT 'text',
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-                );
-            END $$;
-        `;
-        console.log('>>> Executing main migration SQL...');
-        await pool.query(sql);
-        console.log('✅ Main migration SQL executed successfully.');
-
-        // ========== DATABASE INDEXES ==========
-        console.log('>>> Creating database indexes...');
-        const indexSql = `
-            -- Messages: chat xabarlarini tezkor yuklash
-            CREATE INDEX IF NOT EXISTS idx_messages_chat_created ON messages(chat_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
-
-            -- Transactions: tranzaksiya tarixini tezkor filtrlash
-            CREATE INDEX IF NOT EXISTS idx_transactions_sender_created ON transactions(sender_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_transactions_receiver ON transactions(receiver_id);
-            CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
-            CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at DESC);
-
-            -- Chats: chat turini filtrlash
-            CREATE INDEX IF NOT EXISTS idx_chats_type ON chats(type);
-
-            -- Chat Participants: user chatlarini topish
-            CREATE INDEX IF NOT EXISTS idx_chat_participants_user ON chat_participants(user_id);
-
-            -- Escrow: user escrow larini topish
-            CREATE INDEX IF NOT EXISTS idx_escrow_user ON escrow(user_id);
-            CREATE INDEX IF NOT EXISTS idx_escrow_status ON escrow(status);
-
-            -- Services: provider xizmatlarini topish
-            CREATE INDEX IF NOT EXISTS idx_services_provider ON services(provider_id);
-
-            -- User Contacts: kontaktlarni yuklash
-            CREATE INDEX IF NOT EXISTS idx_user_contacts_user ON user_contacts(user_id);
-        `;
-        console.log('>>> Executing index SQL...');
-        await pool.query(indexSql);
-        console.log('✅ Database indexes created successfully.');
-
+        console.log('✅ Background auto-migration completed.');
     } catch (error) {
-        console.error('Auto-migration failed (this is non-critical if columns exist):', error);
+        console.error('Fatal auto-migration error:', error);
     }
 };
 
