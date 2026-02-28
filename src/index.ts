@@ -138,7 +138,28 @@ const runAutoMigration = async () => {
                 BEGIN ALTER TABLE users ADD COLUMN subscription_end_date TIMESTAMP WITH TIME ZONE; EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE token_balances ADD COLUMN locked_balance DECIMAL(20, 4) DEFAULT 0.00; EXCEPTION WHEN duplicate_column THEN NULL; END;
 
-                -- Specialist Layers: Education, Teletherapy, Consultation
+                -- Specialist Layers: Education,                -- MISSING TABLES FIX
+                CREATE TABLE IF NOT EXISTS session_materials (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    session_id VARCHAR(255) NOT NULL,
+                    uploader_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    title VARCHAR(255) NOT NULL,
+                    file_url TEXT NOT NULL,
+                    file_type VARCHAR(50),
+                    file_size_bytes BIGINT DEFAULT 0,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                BEGIN ALTER TABLE session_materials ALTER COLUMN session_id TYPE VARCHAR(255); EXCEPTION WHEN others THEN NULL; END;
+
+                CREATE TABLE IF NOT EXISTS quizzes (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    session_id VARCHAR(255) NOT NULL,
+                    mentor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    title VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                BEGIN ALTER TABLE quizzes ALTER COLUMN session_id TYPE VARCHAR(255); EXCEPTION WHEN others THEN NULL; END;
+
                 CREATE TABLE IF NOT EXISTS courses (
                     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                     teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
