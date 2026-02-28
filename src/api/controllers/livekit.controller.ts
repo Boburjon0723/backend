@@ -20,7 +20,7 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
 
         // Define participant identity and role
         const participantName = user?.name || user?.username || `User-${user?.id.substring(0, 4)}`;
-        const isMentor = user?.is_expert || false;
+        const isMentor = user?.isExpert || false;
 
         const at = new AccessToken(apiKey, apiSecret, {
             identity: user.id || `guest-${Math.random()}`,
