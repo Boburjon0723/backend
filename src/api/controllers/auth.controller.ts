@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { pool } from '../../config/database';
 import { UserModel } from '../../models/postgres/User';
 
 const generateTokens = async (userId: string, phone: string, role: string) => {
@@ -45,6 +46,9 @@ export const register = async (req: Request, res: Response) => {
         const passwordHash = await bcrypt.hash(password, salt);
 
         const newUser = await UserModel.create(phone, passwordHash, name, surname, age);
+
+        // Initialize wallet
+        await pool.query('INSERT INTO token_balances (user_id, balance, locked_balance) VALUES ($1, 0, 0) ON CONFLICT DO NOTHING', [newUser.id]);
 
         const { accessToken, refreshToken } = await generateTokens(newUser.id, newUser.phone, newUser.role);
 

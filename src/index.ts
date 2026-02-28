@@ -110,6 +110,91 @@ const runAutoMigration = async () => {
                 BEGIN ALTER TABLE jobs ADD COLUMN benefits_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE jobs ADD COLUMN apply_method_json JSONB; EXCEPTION WHEN duplicate_column THEN NULL; END;
                 BEGIN ALTER TABLE users ADD COLUMN refresh_token TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+
+                -- Phase 5: Wallet & Monetization Extension
+                CREATE TABLE IF NOT EXISTS platform_settings (
+                    id SERIAL PRIMARY KEY,
+                    expert_subscription_fee DECIMAL(10,2) DEFAULT 20.00,
+                    commission_rate DECIMAL(4,2) DEFAULT 0.10,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                IF NOT EXISTS (SELECT 1 FROM platform_settings WHERE id = 1) THEN
+                    INSERT INTO platform_settings (id, expert_subscription_fee, commission_rate) VALUES (1, 20.00, 0.10);
+                END IF;
+
+                CREATE TABLE IF NOT EXISTS platform_balance (
+                    id SERIAL PRIMARY KEY,
+                    balance DECIMAL(20, 4) DEFAULT 0.00,
+                    total_fees_collected DECIMAL(20, 4) DEFAULT 0.00,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                IF NOT EXISTS (SELECT 1 FROM platform_balance WHERE id = 1) THEN
+                    INSERT INTO platform_balance (id, balance, total_fees_collected) VALUES (1, 0.00, 0.00);
+                END IF;
+
+                BEGIN ALTER TABLE users ADD COLUMN is_expert_active BOOLEAN DEFAULT FALSE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE users ADD COLUMN subscription_end_date TIMESTAMP WITH TIME ZONE; EXCEPTION WHEN duplicate_column THEN NULL; END;
+                BEGIN ALTER TABLE token_balances ADD COLUMN locked_balance DECIMAL(20, 4) DEFAULT 0.00; EXCEPTION WHEN duplicate_column THEN NULL; END;
+
+                -- Specialist Layers: Education, Teletherapy, Consultation
+                CREATE TABLE IF NOT EXISTS courses (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    price_mali DECIMAL(20, 4) DEFAULT 0,
+                    is_published BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS groups (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
+                    name VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS specialist_notes (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    specialist_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    patient_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    session_id UUID,
+                    note TEXT,
+                    is_private BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS case_folders (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    lawyer_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    client_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    title VARCHAR(255) NOT NULL,
+                    status VARCHAR(50) DEFAULT 'open',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                -- Live Sessions & Chat
+                CREATE TABLE IF NOT EXISTS live_sessions (
+                    id VARCHAR(255) PRIMARY KEY,
+                    mentor_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    title VARCHAR(255),
+                    status VARCHAR(50) DEFAULT 'active',
+                    recording_url TEXT,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id SERIAL PRIMARY KEY,
+                    session_id VARCHAR(255) REFERENCES live_sessions(id) ON DELETE CASCADE,
+                    sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    receiver_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    text TEXT,
+                    file_url TEXT,
+                    type VARCHAR(50) DEFAULT 'text',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
             END $$;
         `;
         console.log('>>> Executing main migration SQL...');
