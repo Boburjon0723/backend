@@ -151,7 +151,7 @@ export class SocketService {
                         data.studentId,
                         'booking_accepted',
                         'Dars boshlandi',
-                        `Sizning darsingiz qabul qilindi va boshlandi. Qo'shilish uchun havola: \n\n${data.url}`,
+                        `Sizning darsingiz qabul qilindi. Xonaga qo'shilish uchun quyidagi tugmani bosing:`,
                         { url: data.url },
                         this.io
                     );
