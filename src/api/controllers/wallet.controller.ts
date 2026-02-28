@@ -27,8 +27,8 @@ export class WalletController {
             const studentId = (req as any).user!.id;
             const { expertId, amount } = req.body;
 
-            if (!expertId || !amount) {
-                return res.status(400).json({ success: false, message: 'Expert ID and amount are required' });
+            if (!expertId || amount === undefined || amount === null || isNaN(amount) || amount < 0) {
+                return res.status(400).json({ success: false, message: 'Expert ID and valid amount (>= 0) are required' });
             }
 
             const transaction = await TokenService.bookSession(studentId, expertId, parseFloat(amount));

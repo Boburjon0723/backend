@@ -5,6 +5,7 @@ import { TokenService } from '../services/token.service';
 import { ServiceModel } from '../models/postgres/Service';
 import { UserModel } from '../models/postgres/User';
 import { pool } from '../config/database';
+import { NotificationService } from '../services/notification.service';
 
 // Ensure the AuthenticatedSocket interface matches actual usage
 interface AuthenticatedSocket extends Socket {
@@ -142,6 +143,21 @@ export class SocketService {
 
             authSocket.on('end_call', (data: { to: string }) => {
                 this.io.to(data.to).emit('call_ended', { from: authSocket.user.id });
+            });
+
+            authSocket.on('booking_accept', async (data: { studentId: string, url: string }) => {
+                try {
+                    await NotificationService.createNotification(
+                        data.studentId,
+                        'booking_accepted',
+                        'Dars boshlandi',
+                        `Sizning darsingiz qabul qilindi va boshlandi. Qo'shilish uchun havola: \n\n${data.url}`,
+                        { url: data.url },
+                        this.io
+                    );
+                } catch (error) {
+                    console.error('Failed to notify student of accepted booking:', error);
+                }
             });
 
             authSocket.on('call_signal', (data: { to: string, signal: any }) => {

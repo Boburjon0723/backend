@@ -61,7 +61,9 @@ export const register = async (req: Request, res: Response) => {
                 phone: newUser.phone,
                 name: newUser.name,
                 surname: newUser.surname,
-                role: newUser.role
+                role: newUser.role,
+                is_expert: newUser.is_expert || false,
+                isExpert: newUser.is_expert || false
             }
         });
     } catch (error) {
@@ -103,7 +105,9 @@ export const login = async (req: Request, res: Response) => {
                 surname: user.surname,
                 role: user.role,
                 avatar: user.avatar_url,
-                username: user.username || user.name.toLowerCase().replace(/\s+/g, '_') + '_' + user.id.substring(0, 4)
+                username: user.username || user.name.toLowerCase().replace(/\s+/g, '_') + '_' + user.id.substring(0, 4),
+                is_expert: user.is_expert || false,
+                isExpert: user.is_expert || false
             }
         });
     } catch (error) {
