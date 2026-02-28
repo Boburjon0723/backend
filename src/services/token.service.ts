@@ -214,7 +214,7 @@ export class TokenService {
             await client.query('BEGIN');
 
             // Get Transaction
-            const txRes = await client.query('SELECT * FROM token_transactions WHERE id = $1 AND status = \'pending\' FOR UPDATE', [transactionId]);
+            const txRes = await client.query('SELECT * FROM transactions WHERE id = $1 AND status = \'pending\' FOR UPDATE', [transactionId]);
             const tx = txRes.rows[0];
             if (!tx) throw new Error("Pending transaction not found");
 
@@ -232,7 +232,7 @@ export class TokenService {
             await client.query('UPDATE platform_balance SET balance = balance + $1, total_fees_collected = total_fees_collected + $1 WHERE id = 1', [fee]);
 
             // Mark TX completed
-            await client.query('UPDATE token_transactions SET status = \'completed\', fee = $1, net_amount = $2 WHERE id = $3', [fee, netAmount, transactionId]);
+            await client.query('UPDATE transactions SET status = \'completed\', fee = $1, net_amount = $2 WHERE id = $3', [fee, netAmount, transactionId]);
 
             await client.query('COMMIT');
             return { success: true, amount, netAmount, fee };
@@ -250,7 +250,7 @@ export class TokenService {
     static async getExpertBookings(expertId: string) {
         const query = `
             SELECT t.*, u.name as student_name, u.avatar_url as student_avatar
-            FROM token_transactions t
+            FROM transactions t
             JOIN users u ON t.sender_id = u.id
             WHERE t.receiver_id = $1 AND t.status = 'pending' AND t.type = 'booking'
             ORDER BY t.created_at DESC

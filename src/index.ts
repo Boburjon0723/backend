@@ -149,7 +149,7 @@ const runAutoMigration = async () => {
                     file_size_bytes BIGINT DEFAULT 0,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 );
-                BEGIN ALTER TABLE session_materials ALTER COLUMN session_id TYPE VARCHAR(255); EXCEPTION WHEN others THEN NULL; END;
+                BEGIN ALTER TABLE session_materials ALTER COLUMN session_id TYPE VARCHAR(255) USING session_id::text; EXCEPTION WHEN others THEN NULL; END;
 
                 CREATE TABLE IF NOT EXISTS quizzes (
                     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -158,7 +158,7 @@ const runAutoMigration = async () => {
                     title VARCHAR(255) NOT NULL,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 );
-                BEGIN ALTER TABLE quizzes ALTER COLUMN session_id TYPE VARCHAR(255); EXCEPTION WHEN others THEN NULL; END;
+                BEGIN ALTER TABLE quizzes ALTER COLUMN session_id TYPE VARCHAR(255) USING session_id::text; EXCEPTION WHEN others THEN NULL; END;
 
                 CREATE TABLE IF NOT EXISTS courses (
                     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
