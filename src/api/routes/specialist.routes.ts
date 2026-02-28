@@ -11,7 +11,8 @@ router.post('/groups', authenticateToken, SpecialistController.createGroup);
 // Teletherapy Layer
 router.post('/notes', authenticateToken, SpecialistController.saveNote);
 
-// Consultation Layer
-router.post('/case-folders', authenticateToken, SpecialistController.createCaseFolder);
+// Session Control
+router.patch('/sessions/:id/close', authenticateToken, SpecialistController.closeSession);
 
 export default router;
+
