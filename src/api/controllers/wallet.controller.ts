@@ -60,4 +60,14 @@ export class WalletController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
+
+    static async getMyBookings(req: Request, res: Response) {
+        try {
+            const expertId = (req as any).user!.id;
+            const bookings = await TokenService.getExpertBookings(expertId);
+            res.json({ success: true, data: bookings });
+        } catch (error: any) {
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
 }

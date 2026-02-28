@@ -1,5 +1,7 @@
 import { pool } from '../config/database';
 import { TransactionModel } from '../models/postgres/Transaction';
+import { NotificationService } from './notification.service';
+
 
 interface TransferRequest {
     senderId: string;
@@ -180,7 +182,17 @@ export class TokenService {
                 note: 'Session booking escrow'
             });
 
+            // Notify Expert
+            await NotificationService.createNotification(
+                expertId,
+                'booking_new',
+                'Yangi darsga yozilish',
+                `Talaba sizning darsingizga yozildi. ${amount} MALI kafillikda (escrow).`,
+                { transactionId: transaction.id, studentId, amount }
+            );
+
             await client.query('COMMIT');
+
             return transaction;
         } catch (e) {
             await client.query('ROLLBACK');
@@ -231,4 +243,20 @@ export class TokenService {
             client.release();
         }
     }
+
+    /**
+     * Get pending bookings for an expert
+     */
+    static async getExpertBookings(expertId: string) {
+        const query = `
+            SELECT t.*, u.name as student_name, u.avatar_url as student_avatar
+            FROM token_transactions t
+            JOIN users u ON t.sender_id = u.id
+            WHERE t.receiver_id = $1 AND t.status = 'pending' AND t.type = 'booking'
+            ORDER BY t.created_at DESC
+        `;
+        const res = await pool.query(query, [expertId]);
+        return res.rows;
+    }
 }
+
