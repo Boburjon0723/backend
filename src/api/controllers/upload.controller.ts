@@ -80,6 +80,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
                 name: f.originalname,
                 url: `/uploads/${f.filename}`,
                 type: f.mimetype,
+                mimetype: f.mimetype,
                 size: f.size
             }))
         });
