@@ -122,11 +122,12 @@ export class SocketService {
             });
 
             // Calling Signaling
-            authSocket.on('call_user', (data: { targetUserId: string, signal: any, fromName: string }) => {
+            authSocket.on('call_user', (data: { targetUserId: string, signal: any, fromName: string, callType?: string }) => {
                 this.io.to(data.targetUserId).emit('incoming_call', {
                     signal: data.signal,
                     from: authSocket.user.id,
-                    fromName: data.fromName
+                    fromName: data.fromName,
+                    callType: data.callType
                 });
             });
 
