@@ -27,11 +27,11 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
             name: participantName,
         });
 
-        // Mentors get full control. Students get limited permissions initially.
+        // Allow all users to publish so placeholders/AV work correctly for students as well
         at.addGrant({
             roomJoin: true,
             room: room as string,
-            canPublish: isMentor ? true : false, // Students might only watch unless unmuted
+            canPublish: true, // Allow students to publish tracks
             canPublishData: true,
             canSubscribe: true,
         });
