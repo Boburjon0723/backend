@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { authenticateToken } from '../../middleware/auth.middleware';
-import { getSessionChatHistory, startSessionRecording, stopSessionRecording } from '../controllers/session.controller';
+import { getSessionChatHistory, startSessionRecording, stopSessionRecording, getSessionHistory } from '../controllers/session.controller';
 
 const router = Router();
 
 // Used to fetch chat history of the Live Workspace
+router.get('/sessions/history', authenticateToken, getSessionHistory);
 router.get('/sessions/:sessionId/chat', authenticateToken, getSessionChatHistory);
 
 // Egress Recording (Mock Logic for S3)

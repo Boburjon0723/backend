@@ -219,6 +219,19 @@ export class SocketService {
                 this.io.to(data.sessionId).emit('material_new', data.material);
             });
 
+            // Interactive Whiteboard System
+            authSocket.on('whiteboard:draw', (data: any) => {
+                authSocket.to(data.sessionId).emit('whiteboard:draw', data);
+            });
+
+            authSocket.on('whiteboard:clear', (data: { sessionId: string }) => {
+                authSocket.to(data.sessionId).emit('whiteboard:clear');
+            });
+
+            authSocket.on('whiteboard:toggle', (data: { sessionId: string, isOpen: boolean }) => {
+                this.io.to(data.sessionId).emit('whiteboard:toggle', data.isOpen);
+            });
+
             // Live Quiz System
             authSocket.on('quiz_start', (data: { sessionId: string, quizId: string, quizDetails: any }) => {
                 console.log(`[Socket] Quiz Started in session ${data.sessionId}: ${data.quizId}`);

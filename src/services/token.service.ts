@@ -248,15 +248,19 @@ export class TokenService {
      * Get pending bookings for an expert
      */
     static async getExpertBookings(expertId: string) {
+        // Fetch only the latest pending booking per student to avoid UI duplication
         const query = `
-            SELECT t.*, u.name as student_name, u.avatar_url as student_avatar
+            SELECT DISTINCT ON (t.sender_id) 
+                t.*, u.name as student_name, u.avatar_url as student_avatar
             FROM transactions t
             JOIN users u ON t.sender_id = u.id
             WHERE t.receiver_id = $1 AND t.status = 'pending' AND t.type = 'booking'
-            ORDER BY t.created_at DESC
+            ORDER BY t.sender_id, t.created_at DESC
         `;
         const res = await pool.query(query, [expertId]);
-        return res.rows;
+
+        // Sort the distinct results by created_at DESC as expected by UI
+        return res.rows.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
     }
 }
 

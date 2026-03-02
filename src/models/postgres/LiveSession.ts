@@ -28,6 +28,16 @@ export class LiveSessionModel {
         const result = await query(text, [sessionId]);
         return result.rows[0];
     }
+
+    static async getMentorSessionHistory(mentorId: string) {
+        const text = `
+            SELECT * FROM live_sessions
+            WHERE mentor_id = $1 AND (status = 'recorded' OR status = 'completed')
+            ORDER BY created_at DESC
+        `;
+        const result = await query(text, [mentorId]);
+        return result.rows;
+    }
 }
 
 export class ChatModel {

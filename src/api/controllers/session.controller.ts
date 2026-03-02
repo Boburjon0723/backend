@@ -37,3 +37,15 @@ export const stopSessionRecording = async (req: Request, res: Response): Promise
         res.status(500).json({ error: 'Failed to stop recording' });
     }
 };
+
+export const getSessionHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user!.id;
+        // Assume user is a mentor and fetch their past sessions with recordings
+        const history = await LiveSessionModel.getMentorSessionHistory(userId);
+        res.status(200).json(history);
+    } catch (error) {
+        console.error('Error fetching session history:', error);
+        res.status(500).json({ error: 'Failed to fetch session history' });
+    }
+};
