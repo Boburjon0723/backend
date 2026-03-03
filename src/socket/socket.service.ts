@@ -214,35 +214,47 @@ export class SocketService {
             authSocket.on('lesson_start', async (data: { sessionId: string, mentorName: string }) => {
                 try {
                     const { sessionId, mentorName } = data;
-                    console.log(`[Socket] lesson_start received: sessionId=${sessionId}, mentorName=${mentorName}, userId=${authSocket.user.id}`);
+                    const userId = authSocket.user.id;
+                    console.log(`[Socket] lesson_start received: sessionId=${sessionId}, mentorName=${mentorName}, userId=${userId}`);
 
                     const { MessageModel } = await import('../models/postgres/Message');
-                    const { UserModel } = await import('../models/postgres/User');
+                    const { pool } = await import('../config/database');
 
-                    // Find the persistent chatId for this session
-                    const user = await UserModel.findById(authSocket.user.id);
-                    if (!user) {
-                        console.error(`[Socket] User not found for ID: ${authSocket.user.id}`);
-                        return;
+                    // 1. IMPROVED LOOKUP: Find group chat where this mentor is a participant and the chat name or ID matches session
+                    // In your system, sessionId usually maps to a group name or is stored in metadata.
+                    // But we can also check if the sessionId itself IS a chatId (very common).
+
+                    let chatId: string | null = null;
+
+                    // Option A: Check if sessionId is a valid chatId where user is participant
+                    const checkDirect = await pool.query(
+                        'SELECT chat_id FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
+                        [sessionId, userId]
+                    );
+
+                    if (checkDirect.rowCount > 0) {
+                        chatId = sessionId;
+                        console.log(`[Socket] Found direct chatId match: ${chatId}`);
+                    } else {
+                        // Option B: Search for a group chat where the name matches the sessionId (as a fallback)
+                        const checkByName = await pool.query(`
+                            SELECT c.id FROM chats c
+                            JOIN chat_participants cp ON c.id = cp.chat_id
+                            WHERE c.type = 'group' AND cp.user_id = $1 AND c.name = $2
+                            LIMIT 1
+                        `, [userId, sessionId]);
+
+                        if (checkByName.rowCount > 0) {
+                            chatId = checkByName.rows[0].id;
+                            console.log(`[Socket] Found chatId by name match: ${chatId}`);
+                        }
                     }
 
-                    if (!user.expert_groups) {
-                        console.warn(`[Socket] No expert_groups found for user: ${authSocket.user.id}`);
-                        return;
-                    }
-
-                    const groups = typeof user.expert_groups === 'string' ? JSON.parse(user.expert_groups) : user.expert_groups;
-                    console.log(`[Socket] User expert_groups:`, groups);
-
-                    const targetGroup = groups.find((g: any) => String(g.id) === String(sessionId) || String(g.chatId) === String(sessionId));
-
-                    if (targetGroup && targetGroup.chatId) {
-                        console.log(`[Socket] Found targetGroup:`, targetGroup);
-
+                    if (chatId) {
                         // Create a notification message in the persistent chat
                         const newMessage = await MessageModel.create(
-                            targetGroup.chatId,
-                            authSocket.user.id,
+                            chatId,
+                            userId,
                             `🚀 Ustoz ${mentorName} darsni boshladi!`,
                             'lesson_start',
                             { sessionId: sessionId }
@@ -250,9 +262,9 @@ export class SocketService {
                         console.log(`[Socket] Created DB message:`, newMessage.id);
 
                         // Broadcast to the persistent chat room so students see the card
-                        this.io.to(targetGroup.chatId).emit('message:receive', {
-                            chat_id: targetGroup.chatId,
-                            sender_id: authSocket.user.id,
+                        this.io.to(chatId).emit('message:receive', {
+                            chat_id: chatId,
+                            sender_id: userId,
                             sender_name: mentorName,
                             sender_avatar: authSocket.user.avatar_url,
                             text: `🚀 Ustoz ${mentorName} darsni boshladi!`,
@@ -261,9 +273,9 @@ export class SocketService {
                             created_at: new Date().toISOString()
                         });
 
-                        console.log(`[Socket] Lesson started for session ${sessionId}, notified chat ${targetGroup.chatId}`);
+                        console.log(`[Socket] Lesson started for session ${sessionId}, notified chat ${chatId}`);
                     } else {
-                        console.warn(`[Socket] No targetGroup found for sessionId: ${sessionId} in expert_groups`);
+                        console.warn(`[Socket] Could not determine chatId for session: ${sessionId}. User ${userId} is not in a matching group.`);
                     }
                 } catch (error) {
                     console.error('[Socket] lesson_start error:', error);
