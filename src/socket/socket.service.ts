@@ -232,7 +232,7 @@ export class SocketService {
                         [sessionId, userId]
                     );
 
-                    if (checkDirect.rowCount > 0) {
+                    if ((checkDirect.rowCount ?? 0) > 0) {
                         chatId = sessionId;
                         console.log(`[Socket] Found direct chatId match: ${chatId}`);
                     } else {
@@ -244,7 +244,7 @@ export class SocketService {
                             LIMIT 1
                         `, [userId, sessionId]);
 
-                        if (checkByName.rowCount > 0) {
+                        if ((checkByName.rowCount ?? 0) > 0) {
                             chatId = checkByName.rows[0].id;
                             console.log(`[Socket] Found chatId by name match: ${chatId}`);
                         }
