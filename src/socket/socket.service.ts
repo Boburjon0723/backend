@@ -221,22 +221,24 @@ export class SocketService {
                     const { pool } = await import('../config/database');
 
                     // 1. IMPROVED LOOKUP: Find group chat where this mentor is a participant and the chat name or ID matches session
-                    // In your system, sessionId usually maps to a group name or is stored in metadata.
-                    // But we can also check if the sessionId itself IS a chatId (very common).
-
                     let chatId: string | null = null;
+                    const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 
-                    // Option A: Check if sessionId is a valid chatId where user is participant
-                    const checkDirect = await pool.query(
-                        'SELECT chat_id FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
-                        [sessionId, userId]
-                    );
+                    // Option A: Check if sessionId is a valid chatId (ONLY if it's a valid UUID format)
+                    if (isUuid(sessionId)) {
+                        const checkDirect = await pool.query(
+                            'SELECT chat_id FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
+                            [sessionId, userId]
+                        );
 
-                    if ((checkDirect.rowCount ?? 0) > 0) {
-                        chatId = sessionId;
-                        console.log(`[Socket] Found direct chatId match: ${chatId}`);
-                    } else {
-                        // Option B: Search for a group chat where the name matches the sessionId (as a fallback)
+                        if ((checkDirect.rowCount ?? 0) > 0) {
+                            chatId = sessionId;
+                            console.log(`[Socket] Found direct chatId match: ${chatId}`);
+                        }
+                    }
+
+                    // Option B: Search for a group chat where the name matches the sessionId (fallback)
+                    if (!chatId) {
                         const checkByName = await pool.query(`
                             SELECT c.id FROM chats c
                             JOIN chat_participants cp ON c.id = cp.chat_id
