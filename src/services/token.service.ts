@@ -244,9 +244,6 @@ export class TokenService {
         }
     }
 
-    /**
-     * Get pending bookings for an expert
-     */
     static async getExpertBookings(expertId: string) {
         // Fetch only the latest pending booking per student to avoid UI duplication
         const query = `
@@ -261,6 +258,39 @@ export class TokenService {
 
         // Sort the distinct results by created_at DESC as expected by UI
         return res.rows.sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+    }
+
+    /**
+     * Auto-release bookings older than 30 days
+     */
+    static async releaseExpiredBookings() {
+        const client = await pool.connect();
+        try {
+            // Find all pending bookings older than 30 days
+            const query = `
+                SELECT id FROM transactions 
+                WHERE type = 'booking' AND status = 'pending' 
+                AND created_at <= NOW() - INTERVAL '30 days'
+            `;
+            const res = await client.query(query);
+
+            let releasedCount = 0;
+            for (const row of res.rows) {
+                try {
+                    await this.completeSession(row.id);
+                    releasedCount++;
+                } catch (e: any) {
+                    console.error(`Failed to auto-release booking ${row.id}:`, e.message);
+                }
+            }
+            if (releasedCount > 0) {
+                console.log(`✅ Auto-released ${releasedCount} expired bookings to experts.`);
+            }
+        } catch (error) {
+            console.error('Error in releaseExpiredBookings:', error);
+        } finally {
+            client.release();
+        }
     }
 }
 

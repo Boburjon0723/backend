@@ -72,7 +72,8 @@ export const getProfile = async (req: Request, res: Response) => {
                    p.wiloyat, p.tuman, p.specialization_details, p.has_diploma,
                    p.institution, p.current_workplace, p.diploma_url, p.certificate_url,
                    p.id_url, p.selfie_url, p.hourly_rate, p.currency, p.service_languages,
-                   p.service_format, p.bio_expert, p.specialty_desc, p.services_json
+                   p.service_format, p.bio_expert, p.specialty_desc, p.services_json,
+                   p.expert_groups
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             WHERE u.id = $1
@@ -98,7 +99,7 @@ export const updateProfile = async (req: Request, res: Response) => {
             specialization_details, has_diploma, institution, current_workplace,
             diploma_url, certificate_url, id_url, selfie_url,
             hourly_rate, currency, service_languages, service_format,
-            bio_expert, specialty_desc, services_json
+            bio_expert, specialty_desc, services_json, expert_groups, expert_fee_total
         } = req.body;
         console.log('[updateProfile] Payload:', req.body);
 
@@ -140,8 +141,8 @@ export const updateProfile = async (req: Request, res: Response) => {
                         has_diploma, institution, current_workplace, diploma_url,
                         certificate_url, id_url, selfie_url, hourly_rate, currency,
                         service_languages, service_format, bio_expert, specialty_desc,
-                        services_json
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+                        services_json, expert_groups
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
                     [
                         userId, bio || '', birthday || null, is_expert || false, profession || '', specialization || '',
                         experience_years || 0, service_price || 0, working_hours || '', languages || '',
@@ -150,7 +151,7 @@ export const updateProfile = async (req: Request, res: Response) => {
                         current_workplace || '', diploma_url || '', certificate_url || '',
                         id_url || '', selfie_url || '', hourly_rate || 0, currency || 'MALI',
                         service_languages || '', service_format || '', bio_expert || '',
-                        specialty_desc || '', services_json || '[]'
+                        specialty_desc || '', services_json || '[]', expert_groups || '[]'
                     ]
                 );
             } else {
@@ -200,8 +201,9 @@ export const updateProfile = async (req: Request, res: Response) => {
                         service_format = COALESCE($24, service_format),
                         bio_expert = COALESCE($25, bio_expert),
                         specialty_desc = COALESCE($26, specialty_desc),
-                        services_json = COALESCE($27, services_json)
-                    WHERE user_id = $28`,
+                        services_json = COALESCE($27, services_json),
+                        expert_groups = COALESCE($28, expert_groups)
+                    WHERE user_id = $29`,
                     [
                         bio, birthday || null, is_expert, profession, specialization,
                         experience_years, service_price, working_hours, languages,
@@ -209,7 +211,7 @@ export const updateProfile = async (req: Request, res: Response) => {
                         has_diploma, institution, current_workplace, diploma_url,
                         certificate_url, id_url, selfie_url, hourly_rate, currency,
                         service_languages, service_format, bio_expert, specialty_desc,
-                        services_json, userId
+                        services_json, expert_groups || null, userId
                     ]
                 );
             }
@@ -256,7 +258,7 @@ export const searchUsers = async (req: Request, res: Response) => {
                    p.service_price, p.hourly_rate, p.currency, p.languages, 
                    p.verified_status, p.specialization_details, p.bio_expert,
                    p.specialty_desc, p.service_languages, p.service_format,
-                   p.institution, p.current_workplace
+                   p.institution, p.current_workplace, p.expert_groups, p.wiloyat
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             WHERE 1=1

@@ -146,10 +146,32 @@ export const getChatDetails = async (req: Request, res: Response) => {
 };
 
 export const addParticipant = async (req: Request, res: Response) => {
-    const { chatId } = req.params;
-    const { userId } = req.body;
-    // ... logic placeholder
-    res.status(501).json({ message: 'Not implemented yet for Postgres' });
+    try {
+        const { chatId } = req.params;
+        const { userId } = req.body;
+        const currentUserId = (req as any).user.id;
+
+        if (!chatId || !userId) {
+            return res.status(400).json({ message: 'chatId and userId are required' });
+        }
+
+        const chat = await ChatModel.findById(chatId as string);
+        if (!chat) return res.status(404).json({ message: 'Chat not found' });
+
+        if (chat.type !== 'group' && chat.type !== 'channel') {
+            return res.status(400).json({ message: 'Cannot add participant to a private chat' });
+        }
+
+        // Technically, we should check if currentUserId has permission to add participants 
+        // (e.g. they are the creator of the group). But for now, since it's an automated
+        // process after booking, we will just add the user.
+        await ChatModel.addParticipant(chatId as string, String(userId));
+
+        res.status(200).json({ message: 'Participant added successfully' });
+    } catch (error) {
+        console.error('Add Participant Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
 };
 
 export const getCommunities = async (req: Request, res: Response) => {

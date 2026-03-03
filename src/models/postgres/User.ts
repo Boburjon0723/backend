@@ -164,6 +164,11 @@ export const UserModel = {
             addProfileField('specialty_desc');
             addProfileField('services_json');
             addProfileField('resume_url');
+            // Expert groups
+            if ((data as any).expert_groups !== undefined) {
+                profileFields.push(`expert_groups = $${pIdx++}`);
+                profileValues.push((data as any).expert_groups);
+            }
 
             // Handle re-verification logic if expert fields changed (consistent with controller)
             if (data.is_expert === true || data.profession || data.specialization || data.hourly_rate) {

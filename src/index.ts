@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { pool } from './config/database';
 
 import { globalLimiter } from './middleware/rateLimit.middleware';
+import { TokenService } from './services/token.service';
 
 dotenv.config();
 
@@ -54,7 +55,8 @@ const runAutoMigration = async () => {
             'diploma_url TEXT', 'certificate_url TEXT', 'id_url TEXT',
             'selfie_url TEXT', 'resume_url TEXT', 'hourly_rate DECIMAL(20, 4) DEFAULT 0',
             'currency VARCHAR(10) DEFAULT \'MALI\'', 'service_languages TEXT',
-            'service_format VARCHAR(100)', 'bio_expert TEXT', 'specialty_desc TEXT', 'services_json JSONB'
+            'service_format VARCHAR(100)', 'bio_expert TEXT', 'specialty_desc TEXT', 'services_json JSONB',
+            'expert_groups TEXT', 'expert_fee_total DECIMAL(20, 4) DEFAULT 0'
         ];
         for (const col of profileCols) {
             const colName = col.split(' ')[0];
@@ -263,6 +265,14 @@ const startServer = async () => {
             console.log(`✅ Server is now LISTENING on port ${PORT}`);
             console.log(`API URL: http://localhost:${PORT}`);
             console.log('---------------------------------------');
+
+            // Periodically check for 30-day old escrow bookings and release them (every hour)
+            const ONE_HOUR = 60 * 60 * 1000;
+            setInterval(() => {
+                TokenService.releaseExpiredBookings();
+            }, ONE_HOUR);
+            // Run once on startup
+            TokenService.releaseExpiredBookings();
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);

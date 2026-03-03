@@ -140,5 +140,19 @@ export const ChatModel = {
         } finally {
             client.release();
         }
+    },
+
+    async addParticipant(chatId: string, userId: string): Promise<void> {
+        // Prevent duplicate inserts
+        const existing = await pool.query(
+            'SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+        if (existing.rowCount === 0) {
+            await pool.query(
+                'INSERT INTO chat_participants (chat_id, user_id) VALUES ($1, $2)',
+                [chatId, userId]
+            );
+        }
     }
 };
