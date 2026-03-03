@@ -214,25 +214,40 @@ export class SocketService {
             authSocket.on('lesson_start', async (data: { sessionId: string, mentorName: string }) => {
                 try {
                     const { sessionId, mentorName } = data;
+                    console.log(`[Socket] lesson_start received: sessionId=${sessionId}, mentorName=${mentorName}, userId=${authSocket.user.id}`);
+
                     const { MessageModel } = await import('../models/postgres/Message');
                     const { UserModel } = await import('../models/postgres/User');
 
                     // Find the persistent chatId for this session
                     const user = await UserModel.findById(authSocket.user.id);
-                    if (!user || !user.expert_groups) return;
+                    if (!user) {
+                        console.error(`[Socket] User not found for ID: ${authSocket.user.id}`);
+                        return;
+                    }
+
+                    if (!user.expert_groups) {
+                        console.warn(`[Socket] No expert_groups found for user: ${authSocket.user.id}`);
+                        return;
+                    }
 
                     const groups = typeof user.expert_groups === 'string' ? JSON.parse(user.expert_groups) : user.expert_groups;
-                    const targetGroup = groups.find((g: any) => g.id === sessionId || g.chatId === sessionId);
+                    console.log(`[Socket] User expert_groups:`, groups);
+
+                    const targetGroup = groups.find((g: any) => String(g.id) === String(sessionId) || String(g.chatId) === String(sessionId));
 
                     if (targetGroup && targetGroup.chatId) {
+                        console.log(`[Socket] Found targetGroup:`, targetGroup);
+
                         // Create a notification message in the persistent chat
-                        await MessageModel.create(
+                        const newMessage = await MessageModel.create(
                             targetGroup.chatId,
                             authSocket.user.id,
                             `🚀 Ustoz ${mentorName} darsni boshladi!`,
                             'lesson_start',
                             { sessionId: sessionId }
                         );
+                        console.log(`[Socket] Created DB message:`, newMessage.id);
 
                         // Broadcast to the persistent chat room so students see the card
                         this.io.to(targetGroup.chatId).emit('message:receive', {
@@ -247,9 +262,11 @@ export class SocketService {
                         });
 
                         console.log(`[Socket] Lesson started for session ${sessionId}, notified chat ${targetGroup.chatId}`);
+                    } else {
+                        console.warn(`[Socket] No targetGroup found for sessionId: ${sessionId} in expert_groups`);
                     }
                 } catch (error) {
-                    console.error('Lesson start error:', error);
+                    console.error('[Socket] lesson_start error:', error);
                 }
             });
 
