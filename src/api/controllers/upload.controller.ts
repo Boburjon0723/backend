@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { SessionMaterialModel } from '../../models/postgres/SessionMaterial';
 import { SessionModel } from '../../models/postgres/Session';
+import { MessageModel } from '../../models/postgres/Message';
+import { pool } from '../../config/database';
 import path from 'path';
 
 export const uploadMaterial = async (req: Request, res: Response): Promise<void> => {
@@ -44,6 +46,35 @@ export const uploadMaterial = async (req: Request, res: Response): Promise<void>
             file_type: file.mimetype,
             file_size_bytes: file.size
         });
+
+        // Sync with persistent chat group if it exists
+        try {
+            const profileRes = await pool.query('SELECT expert_groups FROM user_profiles WHERE user_id = $1', [userId]);
+            const expertGroups = profileRes.rows[0]?.expert_groups;
+            if (expertGroups) {
+                const groups = typeof expertGroups === 'string' ? JSON.parse(expertGroups) : expertGroups;
+                const activeGroup = Array.isArray(groups) ? groups.find((g: any) => g.id === sessionId) : null;
+
+                if (activeGroup && activeGroup.chatId) {
+                    await MessageModel.create(
+                        activeGroup.chatId,
+                        userId,
+                        `📁 Yangi material: ${file.originalname}`,
+                        'file',
+                        {
+                            file_url: file_url,
+                            file_name: file.originalname,
+                            file_size: file.size,
+                            mimetype: file.mimetype,
+                            is_material: true
+                        }
+                    );
+                    console.log(`[Material Sync] Uploaded file synced to chat ${activeGroup.chatId}`);
+                }
+            }
+        } catch (syncErr) {
+            console.error('[Material Sync] Error:', syncErr);
+        }
 
         res.status(201).json(material);
 

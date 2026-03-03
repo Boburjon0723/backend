@@ -43,9 +43,14 @@ export class LiveSessionModel {
 export class ChatModel {
     static async saveMessage(sessionId: string, senderId: string, receiverId: string | null, textContent: string, fileUrl: string | null = null, type: string = 'text') {
         const text = `
-            INSERT INTO chat_messages (session_id, sender_id, receiver_id, text, file_url, type)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *;
+            WITH inserted AS (
+                INSERT INTO chat_messages (session_id, sender_id, receiver_id, text, file_url, type)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING *
+            )
+            SELECT i.*, u.name as sender_name, u.avatar_url as sender_avatar
+            FROM inserted i
+            JOIN users u ON i.sender_id = u.id;
         `;
         const result = await query(text, [sessionId, senderId, receiverId, textContent, fileUrl, type]);
         return result.rows[0];

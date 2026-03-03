@@ -66,6 +66,12 @@ export class SocketService {
             authSocket.on('join_room', (roomId: string) => {
                 authSocket.join(roomId);
                 console.log(`User ${authSocket.user.id} joined room ${roomId}`);
+                // Notify others in the room
+                authSocket.to(roomId).emit('participant_joined', {
+                    id: authSocket.user.id,
+                    name: authSocket.user.name || authSocket.user.phone || "User",
+                    avatar: authSocket.user.avatar_url || authSocket.user.avatar || null
+                });
             });
 
             authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string, clientSideId?: string, caption?: string, size?: number, mimetype?: string, parentId?: string }) => {
@@ -182,7 +188,7 @@ export class SocketService {
                     const { sessionId, receiverId, content, fileUrl, type } = data;
                     const { ChatModel } = await import('../models/postgres/LiveSession');
 
-                    const savedMessage = await ChatModel.saveMessage(
+                    const broadcastMsg = await ChatModel.saveMessage(
                         sessionId,
                         authSocket.user.id,
                         receiverId || null,
@@ -190,13 +196,6 @@ export class SocketService {
                         fileUrl || null,
                         type || 'text'
                     );
-
-                    // Attach user info for frontend rendering
-                    const broadcastMsg = {
-                        ...savedMessage,
-                        sender_name: authSocket.user.name || 'User',
-                        sender_avatar: authSocket.user.avatar_url || null
-                    };
 
                     // Broadcast to specific receiver or entire room
                     if (receiverId) {
@@ -208,6 +207,49 @@ export class SocketService {
                 } catch (error) {
                     console.error('Session chat error:', error);
                     authSocket.emit('error', { message: 'Failed to send session chat' });
+                }
+            });
+
+            // Lesson Start Event (Mentor clicks 'Boshlash')
+            authSocket.on('lesson_start', async (data: { sessionId: string, mentorName: string }) => {
+                try {
+                    const { sessionId, mentorName } = data;
+                    const { MessageModel } = await import('../models/postgres/Message');
+                    const { ProfileModel } = await import('../models/postgres/Profile');
+
+                    // Find the persistent chatId for this session
+                    const profile = await ProfileModel.getProfileByUserId(authSocket.user.id);
+                    if (!profile || !profile.expert_groups) return;
+
+                    const groups = typeof profile.expert_groups === 'string' ? JSON.parse(profile.expert_groups) : profile.expert_groups;
+                    const targetGroup = groups.find((g: any) => g.id === sessionId || g.chatId === sessionId);
+
+                    if (targetGroup && targetGroup.chatId) {
+                        // Create a notification message in the persistent chat
+                        await MessageModel.create(
+                            targetGroup.chatId,
+                            authSocket.user.id,
+                            `🚀 Ustoz ${mentorName} darsni boshladi!`,
+                            'lesson_start',
+                            { sessionId: sessionId }
+                        );
+
+                        // Broadcast to the persistent chat room so students see the card
+                        this.io.to(targetGroup.chatId).emit('message:receive', {
+                            chat_id: targetGroup.chatId,
+                            sender_id: authSocket.user.id,
+                            sender_name: mentorName,
+                            sender_avatar: authSocket.user.avatar_url,
+                            text: `🚀 Ustoz ${mentorName} darsni boshladi!`,
+                            type: 'lesson_start',
+                            metadata: { sessionId: sessionId },
+                            created_at: new Date().toISOString()
+                        });
+
+                        console.log(`[Socket] Lesson started for session ${sessionId}, notified chat ${targetGroup.chatId}`);
+                    }
+                } catch (error) {
+                    console.error('Lesson start error:', error);
                 }
             });
 
@@ -354,10 +396,27 @@ export class SocketService {
 
                     if (userSockets?.size === 0) {
                         this.onlineUsers.delete(userId);
-                        // Broadcast 'user_offline'
+                        // Broadcast 'user_status_change'
                         this.io.emit('user_status_change', { userId, status: 'offline', lastSeen: new Date() });
+
+                        // Also notify any rooms the user might have been in for Live Sessions
+                        // For simplicity, we can't easily track which 'sessions' they were in without a more complex Map,
+                        // but usually the frontend 'onUnmount' handles this. 
+                        // However, we can use socket rooms to find where they were.
                     }
                 }
+            });
+
+            // Kick Student from Session
+            authSocket.on('kick_student', (data: { sessionId: string, studentId: string }) => {
+                const { sessionId, studentId } = data;
+                console.log(`[Socket] Mentor ${authSocket.user.id} kicking student ${studentId} from session ${sessionId}`);
+
+                // 1. Emit to the specific student so their UI can react
+                this.io.to(studentId).emit('student_kicked', { sessionId });
+
+                // 2. Notify everyone in the session room
+                this.io.to(sessionId).emit('participant_left', studentId);
             });
         });
     }

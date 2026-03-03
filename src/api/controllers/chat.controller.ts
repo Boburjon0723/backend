@@ -180,7 +180,6 @@ export const addParticipant = async (req: Request, res: Response) => {
     }
 };
 
-// Get all group chats that an expert participates in (created by them)
 export const getExpertGroups = async (req: Request, res: Response) => {
     try {
         const { expertId } = req.params;
@@ -188,18 +187,31 @@ export const getExpertGroups = async (req: Request, res: Response) => {
 
         const { pool } = await import('../../config/database');
         const result = await pool.query(`
-            SELECT c.id, c.name, c.type, c.created_at
+            SELECT c.id, c.name, p.expert_groups
             FROM chats c
             JOIN chat_participants cp ON c.id = cp.chat_id
+            JOIN user_profiles p ON p.user_id = $1
             WHERE c.type = 'group' AND cp.user_id = $1
             ORDER BY c.created_at DESC
         `, [expertId]);
 
-        res.status(200).json(result.rows.map((r: any) => ({
-            chatId: r.id,
-            name: r.name,
-            id: r.id
-        })));
+        if (result.rows.length === 0) return res.status(200).json([]);
+
+        const profileGroups = typeof result.rows[0].expert_groups === 'string'
+            ? JSON.parse(result.rows[0].expert_groups)
+            : result.rows[0].expert_groups;
+
+        const groups = result.rows.map((r: any) => {
+            const meta = Array.isArray(profileGroups) ? profileGroups.find((pg: any) => (pg.chatId === r.id || pg.id === r.id)) : null;
+            return {
+                chatId: r.id,
+                name: r.name,
+                id: r.id,
+                time: meta ? meta.time : 'Vaqt belgilanmagan'
+            };
+        });
+
+        res.status(200).json(groups);
     } catch (error) {
         console.error('Get Expert Groups Error:', error);
         res.status(500).json({ message: 'Internal server error' });
