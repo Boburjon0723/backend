@@ -43,6 +43,7 @@ export interface User {
     services_json?: string; // JSON string
     resume_url?: string;
     refresh_token?: string | null;
+    expert_groups?: any;
 }
 
 export const UserModel = {

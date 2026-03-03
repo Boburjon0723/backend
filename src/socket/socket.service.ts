@@ -215,13 +215,13 @@ export class SocketService {
                 try {
                     const { sessionId, mentorName } = data;
                     const { MessageModel } = await import('../models/postgres/Message');
-                    const { ProfileModel } = await import('../models/postgres/Profile');
+                    const { UserModel } = await import('../models/postgres/User');
 
                     // Find the persistent chatId for this session
-                    const profile = await ProfileModel.getProfileByUserId(authSocket.user.id);
-                    if (!profile || !profile.expert_groups) return;
+                    const user = await UserModel.findById(authSocket.user.id);
+                    if (!user || !user.expert_groups) return;
 
-                    const groups = typeof profile.expert_groups === 'string' ? JSON.parse(profile.expert_groups) : profile.expert_groups;
+                    const groups = typeof user.expert_groups === 'string' ? JSON.parse(user.expert_groups) : user.expert_groups;
                     const targetGroup = groups.find((g: any) => g.id === sessionId || g.chatId === sessionId);
 
                     if (targetGroup && targetGroup.chatId) {
