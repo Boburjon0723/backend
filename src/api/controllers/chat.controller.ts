@@ -167,12 +167,45 @@ export const addParticipant = async (req: Request, res: Response) => {
         // process after booking, we will just add the user.
         await ChatModel.addParticipant(chatId as string, String(userId));
 
+        // Notify via Socket.IO that a new participant joined
+        const io = req.app.get('io');
+        if (io) {
+            io.to(chatId).emit('participant_joined', { chatId, userId: String(userId) });
+        }
+
         res.status(200).json({ message: 'Participant added successfully' });
     } catch (error) {
         console.error('Add Participant Error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };
+
+// Get all group chats that an expert participates in (created by them)
+export const getExpertGroups = async (req: Request, res: Response) => {
+    try {
+        const { expertId } = req.params;
+        if (!expertId) return res.status(400).json({ message: 'expertId is required' });
+
+        const { pool } = await import('../../config/database');
+        const result = await pool.query(`
+            SELECT c.id, c.name, c.type, c.created_at
+            FROM chats c
+            JOIN chat_participants cp ON c.id = cp.chat_id
+            WHERE c.type = 'group' AND cp.user_id = $1
+            ORDER BY c.created_at DESC
+        `, [expertId]);
+
+        res.status(200).json(result.rows.map((r: any) => ({
+            chatId: r.id,
+            name: r.name,
+            id: r.id
+        })));
+    } catch (error) {
+        console.error('Get Expert Groups Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 
 export const getCommunities = async (req: Request, res: Response) => {
     // Communities can be handled as channels in Postgres

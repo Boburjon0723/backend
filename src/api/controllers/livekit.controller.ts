@@ -14,11 +14,9 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // LiveKit configuration (In prod, these should be real secrets)
         const apiKey = process.env.LIVEKIT_API_KEY || 'devkey';
         const apiSecret = process.env.LIVEKIT_API_SECRET || 'secret';
 
-        // Define participant identity and role
         const participantName = user?.name || user?.username || `User-${user?.id.substring(0, 4)}`;
         const isMentor = user?.isExpert || false;
 
@@ -27,19 +25,28 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
             name: participantName,
         });
 
-        // Allow all users to publish so placeholders/AV work correctly for students as well
         at.addGrant({
             roomJoin: true,
             room: room as string,
-            canPublish: true, // Allow students to publish tracks
+            canPublish: true,
             canPublishData: true,
             canSubscribe: true,
         });
 
         const token = await at.toJwt();
-
-        // Return WebSocket URL to connect
         const wsUrl = process.env.LIVEKIT_URL || 'ws://localhost:7880';
+
+        // Notify group members about session activity via Socket.IO
+        const io = req.app.get('io');
+        if (io && room && isMentor) {
+            // Mentor started — broadcast to the group room so students see join button
+            io.to(room as string).emit('group_session_started', {
+                roomId: room,
+                mentorId: user.id,
+                mentorName: participantName,
+                startedAt: new Date().toISOString()
+            });
+        }
 
         res.status(200).json({
             token,
@@ -52,4 +59,14 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
     }
 };
 
-export { createToken };
+// Endpoint to mark session as ended (called when mentor clicks End Session)
+const endSession = async (req: Request, res: Response): Promise<void> => {
+    const { room } = req.query;
+    const io = req.app.get('io');
+    if (io && room) {
+        io.to(room as string).emit('group_session_ended', { roomId: room });
+    }
+    res.status(200).json({ success: true });
+};
+
+export { createToken, endSession };
