@@ -65,9 +65,16 @@ export class SocketService {
 
             authSocket.on('join_room', (roomId: string) => {
                 authSocket.join(roomId);
-                console.log(`User ${authSocket.user.id} joined room ${roomId}`);
-                // Notify others in the room
-                authSocket.to(roomId).emit('participant_joined', {
+                console.log(`[Socket] User ${authSocket.user.id} joined room ${roomId}`);
+            });
+
+            authSocket.on('session_join', (data: { sessionId: string }) => {
+                const { sessionId } = data;
+                authSocket.join(sessionId);
+                console.log(`[Socket] User ${authSocket.user.id} joined session ${sessionId}`);
+
+                // Notify others in the room (Live Session Attendees)
+                authSocket.to(sessionId).emit('participant_joined', {
                     id: authSocket.user.id,
                     name: authSocket.user.name || authSocket.user.phone || "User",
                     avatar: authSocket.user.avatar_url || authSocket.user.avatar || null
