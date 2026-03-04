@@ -4,6 +4,38 @@ import { SessionModel } from '../../models/postgres/Session';
 import { MessageModel } from '../../models/postgres/Message';
 import { pool } from '../../config/database';
 import path from 'path';
+import fs from 'fs';
+import { supabase } from '../../config/supabase';
+
+const BUCKET_NAME = 'mali-media';
+
+async function uploadToSupabase(file: any): Promise<string> {
+    const fileExt = path.extname(file.originalname);
+    const fileName = `${Date.now()}-${Math.floor(Math.random() * 1000)}${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { data, error } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(filePath, fs.readFileSync(file.path), {
+            contentType: file.mimetype,
+            upsert: false
+        });
+
+    if (error) {
+        throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+
+    // Clean up local file created by multer
+    if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+    }
+
+    return publicUrl;
+}
 
 export const uploadMaterial = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -33,10 +65,7 @@ export const uploadMaterial = async (req: Request, res: Response): Promise<void>
         }
 
         const file = req.file;
-
-        // In a real app we upload to S3/MinIO. Here we assume multer saves locally and gives us a filename.
-        // For development, we'll store public URL assuming static serving of /uploads folder.
-        const file_url = `/uploads/${file.filename}`;
+        const file_url = await uploadToSupabase(file);
 
         const material = await SessionMaterialModel.create({
             session_id: sessionId,
@@ -102,21 +131,76 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
         }
 
         const files = req.files ? (req.files as any[]) : [req.file];
-        const urls = files.map(f => `/uploads/${f.filename}`);
 
-        res.json({
-            success: true,
-            urls,
-            files: files.map(f => ({
+        const uploadedFiles = await Promise.all(files.map(async f => {
+            const publicUrl = await uploadToSupabase(f);
+            return {
                 name: f.originalname,
-                url: `/uploads/${f.filename}`,
+                url: publicUrl,
                 type: f.mimetype,
                 mimetype: f.mimetype,
                 size: f.size
-            }))
+            };
+        }));
+
+        res.json({
+            success: true,
+            urls: uploadedFiles.map(f => f.url),
+            files: uploadedFiles
         });
     } catch (error) {
         console.error('Error uploading general file:', error);
         res.status(500).json({ error: 'Failed to upload files' });
+    }
+};
+
+export const streamFile = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const filename = req.params.filename;
+        const filePath = path.join(__dirname, '../../../../uploads', filename);
+
+        if (!fs.existsSync(filePath)) {
+            res.status(404).json({ error: 'File not found' });
+            return;
+        }
+
+        const stat = fs.statSync(filePath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+
+        if (range) {
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+            if (start >= fileSize) {
+                res.status(416).send('Requested range not satisfiable\n' + start + ' >= ' + fileSize);
+                return;
+            }
+
+            const chunksize = (end - start) + 1;
+            const file = fs.createReadStream(filePath, { start, end });
+            const head = {
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunksize,
+                'Content-Type': 'application/octet-stream', // Could detect mime here
+            };
+
+            res.writeHead(206, head);
+            file.pipe(res);
+        } else {
+            const head = {
+                'Content-Length': fileSize,
+                'Content-Type': 'application/octet-stream',
+            };
+            res.writeHead(200, head);
+            fs.createReadStream(filePath as string).pipe(res);
+        }
+    } catch (error) {
+        console.error('Error streaming file:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to stream file' });
+        }
     }
 };

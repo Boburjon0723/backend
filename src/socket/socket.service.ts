@@ -6,6 +6,7 @@ import { ServiceModel } from '../models/postgres/Service';
 import { UserModel } from '../models/postgres/User';
 import { pool } from '../config/database';
 import { NotificationService } from '../services/notification.service';
+import { safeDelCache } from '../config/redis';
 
 // Ensure the AuthenticatedSocket interface matches actual usage
 interface AuthenticatedSocket extends Socket {
@@ -81,9 +82,9 @@ export class SocketService {
                 });
             });
 
-            authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string, clientSideId?: string, caption?: string, size?: number, mimetype?: string, parentId?: string }) => {
+            authSocket.on('send_message', async (data: { roomId: string, content: string, type?: string, clientSideId?: string, caption?: string, metadata?: any, parentId?: string }) => {
                 try {
-                    const { roomId, content, type, clientSideId, caption, size, mimetype, parentId } = data;
+                    const { roomId, content, type, clientSideId, caption, metadata, parentId } = data;
 
                     // Mutual Block Guard for Private Chats
                     const chatRes = await pool.query(`SELECT type FROM chats WHERE id = $1`, [roomId]);
@@ -105,10 +106,9 @@ export class SocketService {
                         content,
                         type || 'text',
                         {
+                            ...(metadata || {}),
                             senderName: authSocket.user.name || authSocket.user.phone || "Unknown User",
-                            caption: caption,
-                            size: size,
-                            mimetype: mimetype
+                            caption: caption
                         },
                         parentId
                     );
@@ -123,6 +123,16 @@ export class SocketService {
                     });
                     console.log(`[Socket] Broadcasted to room: ${roomId} with clientSideId: ${clientSideId}`);
 
+                    // 2.5 Cache Invalidation
+                    try {
+                        const participantsRes = await pool.query('SELECT user_id FROM chat_participants WHERE chat_id = $1', [roomId]);
+                        for (const row of participantsRes.rows) {
+                            await safeDelCache(`user_chats:${row.user_id}`);
+                        }
+                    } catch (cacheErr) {
+                        console.error('[Socket Cache Inval] Error:', cacheErr);
+                    }
+
                     // 3. Bot Logic check
                     if (content.startsWith('/')) {
                         await this.handleBotCommand(authSocket, roomId, content);
@@ -131,6 +141,29 @@ export class SocketService {
                 } catch (error) {
                     console.error('Send message error:', error);
                     authSocket.emit('error', { message: 'Failed to send message' });
+                }
+            });
+
+            // Read Receipts
+            authSocket.on('mark_messages_read', async (data: { roomId: string, messageIds: string[] }) => {
+                try {
+                    const { roomId, messageIds } = data;
+                    const userId = authSocket.user.id;
+
+                    // Mark as read in DB
+                    const updatedMessageIds = await MessageModel.markAsRead(roomId, messageIds, userId);
+
+                    if (updatedMessageIds.length > 0) {
+                        // Broadcast to everyone in the room (including sender) that these messages were read
+                        this.io.to(roomId).emit('messages_read', {
+                            roomId,
+                            messageIds: updatedMessageIds,
+                            readBy: userId
+                        });
+                        console.log(`[Socket] Marked ${updatedMessageIds.length} messages as read in room ${roomId} by ${userId}`);
+                    }
+                } catch (error) {
+                    console.error('Mark messages read error:', error);
                 }
             });
 
@@ -217,6 +250,15 @@ export class SocketService {
                 }
             });
 
+            // Whiteboard Sync System
+            authSocket.on('whiteboard:draw', (data: { sessionId: string, x: number, y: number, color: string, lineWidth: number, type: string }) => {
+                authSocket.to(data.sessionId).emit('whiteboard:draw', data);
+            });
+
+            authSocket.on('whiteboard:clear', (data: { sessionId: string }) => {
+                authSocket.to(data.sessionId).emit('whiteboard:clear', data);
+            });
+
             // Lesson Start Event (Mentor clicks 'Boshlash')
             authSocket.on('lesson_start', async (data: { sessionId: string, mentorName: string }) => {
                 try {
@@ -229,10 +271,9 @@ export class SocketService {
 
                     // 1. IMPROVED LOOKUP: Find group chat where this mentor is a participant and the chat name or ID matches session
                     let chatId: string | null = null;
-                    const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
-
-                    // Option A: Check if sessionId is a valid chatId (ONLY if it's a valid UUID format)
-                    if (isUuid(sessionId)) {
+                    // Option A: Check if sessionId is a valid chatId (UUID)
+                    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (uuidRegex.test(sessionId)) {
                         const checkDirect = await pool.query(
                             'SELECT chat_id FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
                             [sessionId, userId]
@@ -259,6 +300,10 @@ export class SocketService {
                         }
                     }
 
+                    if (!chatId) {
+                        console.warn(`[Socket] lesson_start: No chatId found for expert ${userId} with sessionId ${sessionId}`);
+                    }
+
                     if (chatId) {
                         // Create a notification message in the persistent chat
                         const newMessage = await MessageModel.create(
@@ -271,12 +316,14 @@ export class SocketService {
                         console.log(`[Socket] Created DB message:`, newMessage.id);
 
                         // Broadcast to the persistent chat room so students see the card
-                        this.io.to(chatId).emit('message:receive', {
+                        this.io.to(chatId).emit('receive_message', {
+                            id: newMessage.id,
                             chat_id: chatId,
+                            roomId: chatId,
                             sender_id: userId,
                             sender_name: mentorName,
                             sender_avatar: authSocket.user.avatar_url,
-                            text: `🚀 Ustoz ${mentorName} darsni boshladi!`,
+                            content: `🚀 Ustoz ${mentorName} darsni boshladi!`,
                             type: 'lesson_start',
                             metadata: { sessionId: sessionId },
                             created_at: new Date().toISOString()

@@ -11,6 +11,7 @@ export interface Message {
     created_at: Date;
     sender_name?: string;
     parentMessage?: any;
+    is_read?: boolean;
 }
 
 export const MessageModel = {
@@ -75,5 +76,18 @@ export const MessageModel = {
         if (!messageIds || messageIds.length === 0) return;
         const query = `DELETE FROM messages WHERE chat_id = $1 AND id = ANY($2::uuid[])`;
         await pool.query(query, [chatId, messageIds]);
+    },
+
+    async markAsRead(chatId: string, messageIds: string[], userId: string): Promise<string[]> {
+        if (!messageIds || messageIds.length === 0) return [];
+        // Only mark messages as read if the current user is NOT the sender
+        const query = `
+            UPDATE messages 
+            SET is_read = TRUE 
+            WHERE chat_id = $1 AND sender_id != $3 AND id = ANY($2::uuid[])
+            RETURNING id
+        `;
+        const result = await pool.query(query, [chatId, messageIds, userId]);
+        return result.rows.map(row => row.id);
     }
 };

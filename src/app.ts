@@ -23,6 +23,7 @@ import quizRoutes from './api/routes/quiz.routes';
 import livekitRoutes from './api/routes/livekit.routes';
 import sessionRoutes from './api/routes/session.routes';
 import walletRoutes from './api/routes/wallet.routes';
+import reviewRoutes from './api/routes/review.routes';
 
 const app = express();
 
@@ -78,6 +79,7 @@ app.use('/api', quizRoutes);
 app.use('/api', livekitRoutes);
 app.use('/api', sessionRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // 404 handler
 app.use((req, res) => {

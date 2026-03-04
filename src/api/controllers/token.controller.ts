@@ -223,3 +223,25 @@ export const getTopUpRequests = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Failed to fetch requests' });
     }
 };
+
+export const getTransactions = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+        const result = await pool.query(`
+            SELECT t.*, 
+                   u_sender.name as sender_name, u_sender.surname as sender_surname, u_sender.avatar_url as sender_avatar,
+                   u_receiver.name as receiver_name, u_receiver.surname as receiver_surname, u_receiver.avatar_url as receiver_avatar
+            FROM transactions t
+            LEFT JOIN users u_sender ON t.sender_id = u_sender.id
+            LEFT JOIN users u_receiver ON t.receiver_id = u_receiver.id
+            WHERE t.sender_id = $1 OR t.receiver_id = $1
+            ORDER BY t.created_at DESC
+            LIMIT 50
+        `, [userId]);
+
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('Get Transactions Error:', error);
+        res.status(500).json({ message: 'Failed to fetch transactions' });
+    }
+};

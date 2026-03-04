@@ -17,8 +17,9 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
         const apiKey = process.env.LIVEKIT_API_KEY || 'devkey';
         const apiSecret = process.env.LIVEKIT_API_SECRET || 'secret';
 
-        const participantName = user?.name || user?.username || `User-${user?.id.substring(0, 4)}`;
-        const isMentor = user?.isExpert || false;
+        const fullName = user?.name ? `${user.name}${user.surname ? ' ' + user.surname : ''}` : null;
+        const participantName = fullName || user?.username || `User-${user?.id.substring(0, 4)}`;
+        const isMentor = user?.isExpert || user?.role === 'expert' || user?.is_expert || false;
 
         const at = new AccessToken(apiKey, apiSecret, {
             identity: user.id || `guest-${Math.random()}`,

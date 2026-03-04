@@ -23,8 +23,8 @@ const io = new Server(server, {
         methods: ["GET", "POST"],
         credentials: true
     },
-    // Allow both polling and websocket transports (Railway compatibility)
-    transports: ['polling', 'websocket'],
+    // Prioritize websocket transport
+    transports: ['websocket', 'polling'],
     allowEIO3: true,
     pingTimeout: 60000,
     pingInterval: 25000,
@@ -229,6 +229,18 @@ const runAutoMigration = async () => {
                 text TEXT,
                 file_url TEXT,
                 type VARCHAR(50) DEFAULT 'text',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // expert_reviews table
+        await runQuery('CreateTable_ExpertReviews', `
+            CREATE TABLE IF NOT EXISTS expert_reviews (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                expert_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                client_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         `);

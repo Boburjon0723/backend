@@ -4,12 +4,12 @@ import jwt from 'jsonwebtoken';
 import { pool } from '../../config/database';
 import { UserModel } from '../../models/postgres/User';
 
-const generateTokens = async (userId: string, phone: string, role: string, isExpert: boolean = false) => {
+const generateTokens = async (userId: string, phone: string, role: string, isExpert: boolean = false, name: string = '', surname: string = '') => {
     const accessTokenSecret = process.env.JWT_SECRET || 'secret';
     const refreshTokenSecret = process.env.JWT_REFRESH_SECRET || 'refresh_secret';
 
     const accessToken = jwt.sign(
-        { id: userId, phone, role, isExpert },
+        { id: userId, phone, role, isExpert, name, surname },
         accessTokenSecret,
         { expiresIn: (process.env.NEXT_PUBLIC_JWT_EXPIRES_IN || '1d') as any }
     );
@@ -50,7 +50,7 @@ export const register = async (req: Request, res: Response) => {
         // Initialize wallet
         await pool.query('INSERT INTO token_balances (user_id, balance, locked_balance) VALUES ($1, 0, 0) ON CONFLICT DO NOTHING', [newUser.id]);
 
-        const { accessToken, refreshToken } = await generateTokens(newUser.id, newUser.phone, newUser.role, newUser.is_expert);
+        const { accessToken, refreshToken } = await generateTokens(newUser.id, newUser.phone, newUser.role, newUser.is_expert, newUser.name, newUser.surname);
 
         res.status(201).json({
             message: 'User registered successfully',
@@ -92,7 +92,7 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        const { accessToken, refreshToken } = await generateTokens(user.id, user.phone, user.role, user.is_expert);
+        const { accessToken, refreshToken } = await generateTokens(user.id, user.phone, user.role, user.is_expert, user.name, user.surname);
 
         res.json({
             message: 'Login successful',
@@ -143,7 +143,7 @@ export const refresh = async (req: Request, res: Response) => {
             return res.status(403).json({ message: 'Token rotation detected or invalid' });
         }
 
-        const tokens = await generateTokens(user.id, user.phone, user.role, user.is_expert);
+        const tokens = await generateTokens(user.id, user.phone, user.role, user.is_expert, user.name, user.surname);
 
         res.json({
             accessToken: tokens.accessToken,

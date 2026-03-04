@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ChatModel } from '../../models/postgres/Chat';
 import { MessageModel } from '../../models/postgres/Message';
 import { UserModel } from '../../models/postgres/User';
+import { safeGetCache, safeSetCache, safeDelCache } from '../../config/redis';
 
 export const createChat = async (req: Request, res: Response) => {
     try {
@@ -41,6 +42,16 @@ export const createChat = async (req: Request, res: Response) => {
             chat = await ChatModel.createPrivate(currentUserId, participantId);
         }
 
+        // Invalidate cache since a new chat was created
+        await safeDelCache(`user_chats:${currentUserId}`);
+        if (type === 'private' && participantId) {
+            await safeDelCache(`user_chats:${participantId}`);
+        } else if (participants) {
+            for (const p of participants) {
+                await safeDelCache(`user_chats:${p}`);
+            }
+        }
+
         res.status(201).json(chat);
     } catch (error: any) {
         console.error('Create Chat Error:', error);
@@ -50,9 +61,17 @@ export const createChat = async (req: Request, res: Response) => {
 export const getUserChats = async (req: Request, res: Response) => {
     try {
         const currentUserId = (req as any).user.id;
-        console.log(`[getUserChats] Fetching chats for user: ${currentUserId}`);
+        const cacheKey = `user_chats:${currentUserId}`;
+
+        // Try getting from cache first
+        const cachedChats = await safeGetCache(cacheKey);
+        if (cachedChats) {
+            console.log(`[getUserChats] Cache HIT for user: ${currentUserId}`);
+            return res.status(200).json(JSON.parse(cachedChats));
+        }
+
+        console.log(`[getUserChats] Cache MISS. Fetching chats from DB for user: ${currentUserId}`);
         const chats = await ChatModel.findUserChats(currentUserId);
-        console.log(`[getUserChats] Found ${chats.length} chats`);
 
         // Enrich private chats with other user's info
         const enriched = await Promise.all(chats.map(async (chat) => {
@@ -80,6 +99,9 @@ export const getUserChats = async (req: Request, res: Response) => {
             }
             return { ...chat, otherUser: null };
         }));
+
+        // Set cache for 5 minutes
+        await safeSetCache(cacheKey, JSON.stringify(enriched), 300);
 
         res.status(200).json(enriched);
     } catch (error) {
