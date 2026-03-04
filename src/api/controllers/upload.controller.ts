@@ -156,7 +156,7 @@ export const uploadFile = async (req: Request, res: Response): Promise<void> => 
 
 export const streamFile = async (req: Request, res: Response): Promise<void> => {
     try {
-        const filename = req.params.filename;
+        const filename = req.params.filename as string;
         const filePath = path.join(__dirname, '../../../../uploads', filename);
 
         if (!fs.existsSync(filePath)) {
