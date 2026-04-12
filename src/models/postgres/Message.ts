@@ -31,10 +31,25 @@ export const MessageModel = {
     },
 
     async findByChatId(chatId: string): Promise<Message[]> {
+        /** `m.*` emas — JOIN ustunlari bilan nom to‘qnashuvi (node-pg oxirgisi ustun qiladi) va
+         *  `created_at` noto‘g‘ri jadvaldan olinishi mumkin. Har doim `m` maydonlari aniq. */
         const query = `
-            SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar,
-                   p.content as parent_content, p.type as parent_type, p.metadata as parent_metadata,
-                   pu.name as parent_sender_name
+            SELECT
+                m.id,
+                m.chat_id,
+                m.sender_id,
+                m.content,
+                m.type,
+                m.metadata,
+                m.parent_id,
+                m.created_at,
+                m.is_read,
+                u.name AS sender_name,
+                u.avatar_url AS sender_avatar,
+                p.content AS parent_content,
+                p.type AS parent_type,
+                p.metadata AS parent_metadata,
+                pu.name AS parent_sender_name
             FROM messages m
             LEFT JOIN users u ON m.sender_id = u.id
             LEFT JOIN messages p ON m.parent_id = p.id
@@ -44,28 +59,63 @@ export const MessageModel = {
         `;
         const result = await pool.query(query, [chatId]);
 
-        return result.rows.map(row => ({
-            ...row,
-            parentMessage: row.parent_id ? {
-                id: row.parent_id,
-                text: row.parent_content,
-                type: row.parent_type,
-                metadata: row.parent_metadata,
-                senderName: row.parent_sender_name
-            } : null
+        return result.rows.map((row) => ({
+            id: row.id,
+            chat_id: row.chat_id,
+            sender_id: row.sender_id,
+            content: row.content,
+            type: row.type,
+            metadata: row.metadata,
+            parent_id: row.parent_id,
+            created_at: row.created_at,
+            is_read: row.is_read,
+            sender_name: row.sender_name,
+            sender_avatar: row.sender_avatar,
+            parentMessage: row.parent_id
+                ? {
+                      id: row.parent_id,
+                      text: row.parent_content,
+                      type: row.parent_type,
+                      metadata: row.parent_metadata,
+                      senderName: row.parent_sender_name,
+                  }
+                : null,
         }));
     },
 
     async searchMessages(chatId: string, queryText: string): Promise<Message[]> {
         const query = `
-            SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar
+            SELECT
+                m.id,
+                m.chat_id,
+                m.sender_id,
+                m.content,
+                m.type,
+                m.metadata,
+                m.parent_id,
+                m.created_at,
+                m.is_read,
+                u.name AS sender_name,
+                u.avatar_url AS sender_avatar
             FROM messages m
             LEFT JOIN users u ON m.sender_id = u.id
             WHERE m.chat_id = $1 AND m.content ILIKE $2
             ORDER BY m.created_at DESC
         `;
         const result = await pool.query(query, [chatId, `%${queryText}%`]);
-        return result.rows;
+        return result.rows.map((row) => ({
+            id: row.id,
+            chat_id: row.chat_id,
+            sender_id: row.sender_id,
+            content: row.content,
+            type: row.type,
+            metadata: row.metadata,
+            parent_id: row.parent_id,
+            created_at: row.created_at,
+            is_read: row.is_read,
+            sender_name: row.sender_name,
+            sender_avatar: row.sender_avatar,
+        }));
     },
 
     async deleteByChatId(chatId: string): Promise<void> {

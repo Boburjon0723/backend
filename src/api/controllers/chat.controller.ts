@@ -242,6 +242,22 @@ export const getUserChats = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * DB dan kelgan `created_at` ni JSON uchun: allaqachon ISO qator bo‘lsa o‘zgartirmaymiz;
+ * `Date` bo‘lsa `toISOString()`. Mavjud qiymatni `new Date(value)` orqali qayta parse qilmaslik kerak —
+ * ayrim qiymatlar (masalan, driverdan kelgan maxsus format / soniyada saqlangan vaqt) noto‘g‘ri
+ * interpretatsiya qilinishi yoki bir xil `getTime()` ga tushishi mumkin.
+ */
+function createdAtFromDbForJson(value: unknown): string | null {
+    if (!value) return null;
+
+    if (typeof value === 'string') return value;
+
+    if (value instanceof Date) return value.toISOString();
+
+    return null;
+}
+
 export const getMessages = async (req: Request, res: Response) => {
     try {
         const { chatId } = req.params;
@@ -251,16 +267,13 @@ export const getMessages = async (req: Request, res: Response) => {
             return res.status(200).json([]); // Return empty messages for old mongo IDs
         }
         const messages = await MessageModel.findByChatId(chatId as string);
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[CHAT_FIX][api]', messages.map((m) => m.created_at));
+        }
+
         const payload = messages.map((msg) => {
-            const c = msg.created_at;
-            const created_at =
-                c instanceof Date
-                    ? c.toISOString()
-                    : typeof c === 'string'
-                      ? c
-                      : c != null
-                        ? String(c)
-                        : c;
+            const created_at = createdAtFromDbForJson(msg.created_at);
             return { ...msg, created_at };
         });
         res.status(200).json(payload);
