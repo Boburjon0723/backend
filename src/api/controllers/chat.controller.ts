@@ -255,6 +255,12 @@ function createdAtFromDbForJson(value: unknown): string | null {
 
     if (value instanceof Date) return value.toISOString();
 
+    /** Ba'zan serializatsiya / driver son (unix s/ms) qaytarishi mumkin */
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        const ms = value < 1e12 ? value * 1000 : value;
+        return new Date(ms).toISOString();
+    }
+
     return null;
 }
 

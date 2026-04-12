@@ -55,7 +55,7 @@ export const MessageModel = {
             LEFT JOIN messages p ON m.parent_id = p.id
             LEFT JOIN users pu ON p.sender_id = pu.id
             WHERE m.chat_id = $1
-            ORDER BY m.created_at ASC
+            ORDER BY m.created_at ASC, m.id ASC
         `;
         const result = await pool.query(query, [chatId]);
 
