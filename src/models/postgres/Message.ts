@@ -17,9 +17,10 @@ export interface Message {
 
 export const MessageModel = {
     async create(chatId: string, senderId: string, content: string, type: string = 'text', metadata: any = {}, parentId: string | null = null): Promise<Message> {
+        /** `created_at` aniq — ba’zi muhitlarda DEFAULT ishlamasligi / NULL qolishi oldini olish */
         const query = `
-            INSERT INTO messages (chat_id, sender_id, content, type, metadata, parent_id)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO messages (chat_id, sender_id, content, type, metadata, parent_id, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
             RETURNING *
         `;
         const result = await pool.query(query, [chatId, senderId, content, type, JSON.stringify(metadata), parentId]);

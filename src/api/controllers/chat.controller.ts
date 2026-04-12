@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { stableIsoWhenCreatedAtNull } from '../../utils/stableMessageCreatedAt';
 import { ChatModel } from '../../models/postgres/Chat';
 import { MessageModel } from '../../models/postgres/Message';
 import { UserModel } from '../../models/postgres/User';
@@ -249,19 +250,32 @@ export const getUserChats = async (req: Request, res: Response) => {
  * interpretatsiya qilinishi yoki bir xil `getTime()` ga tushishi mumkin.
  */
 function createdAtFromDbForJson(value: unknown): string | null {
-    if (!value) return null;
+    if (value == null || value === '') return null;
 
-    if (typeof value === 'string') return value;
+    if (typeof value === 'string') {
+        const t = value.trim();
+        return t || null;
+    }
 
-    if (value instanceof Date) return value.toISOString();
+    if (value instanceof Date) {
+        const ms = value.getTime();
+        return Number.isNaN(ms) ? null : value.toISOString();
+    }
 
     /** Ba'zan serializatsiya / driver son (unix s/ms) qaytarishi mumkin */
     if (typeof value === 'number' && Number.isFinite(value)) {
         const ms = value < 1e12 ? value * 1000 : value;
-        return new Date(ms).toISOString();
+        const d = new Date(ms);
+        return Number.isNaN(d.getTime()) ? null : d.toISOString();
     }
 
-    return null;
+    /** Oxirgi urinish — null qaytarmaslik (frontend stagger 1s noto‘g‘ri vaqt chizig‘i yasaydi) */
+    try {
+        const d = new Date(value as string | number);
+        return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    } catch {
+        return null;
+    }
 }
 
 export const getMessages = async (req: Request, res: Response) => {
@@ -278,8 +292,19 @@ export const getMessages = async (req: Request, res: Response) => {
             console.log('[CHAT_FIX][api]', messages.map((m) => m.created_at));
         }
 
-        const payload = messages.map((msg) => {
-            const created_at = createdAtFromDbForJson(msg.created_at);
+        const payload = messages.map((msg, index) => {
+            let created_at = createdAtFromDbForJson(msg.created_at);
+            if (created_at == null && msg.created_at instanceof Date) {
+                const ms = msg.created_at.getTime();
+                created_at = Number.isNaN(ms) ? null : msg.created_at.toISOString();
+            }
+            /**
+             * DB NULL — avvalgi `Date.now()` har refreshda "hozirgi vaqt" ko‘rsatardi.
+             * Barqaror ISO (id + index) — refresh qilinsa ham bir xil; haqiqiy vaqt uchun DB UPDATE.
+             */
+            if (created_at == null) {
+                created_at = stableIsoWhenCreatedAtNull(String(msg.id ?? index), index);
+            }
             return { ...msg, created_at };
         });
         res.status(200).json(payload);
