@@ -55,6 +55,18 @@ function consultPanelInviteChatContent(
     return `📞 **${expertName}** onlayn konsultatsiya uchun tayyor. Uchrashuvni boshlash uchun quyidagi tugmani bosing.`;
 }
 
+/** PG `Date` / string — socket JSON da `created_at` doim mavjud bo‘lishi uchun ISO string */
+function messageCreatedAtToIso(row: { created_at?: Date | string | null }): string {
+    const c = row.created_at;
+    if (c == null) return new Date().toISOString();
+    if (c instanceof Date) return c.toISOString();
+    if (typeof c === 'string') {
+        const t = Date.parse(c);
+        return Number.isNaN(t) ? new Date().toISOString() : new Date(t).toISOString();
+    }
+    return new Date().toISOString();
+}
+
 /** Chatga tushadigan matn: dars (mentor) yoki konsultatsiya sessiyasi */
 function lessonNotifyChatContent(
     mentorName: string,
@@ -250,14 +262,28 @@ export class SocketService {
                     }
 
                     // 2. Broadcast to room (including sender for confirmation)
-                    // Include roomId explicitly so frontend can match it, since savedMessage has chat_id (snake_case)
-                    this.io.to(roomId).emit('receive_message', {
-                        ...savedMessage,
-                        roomId: roomId,  // Explicit roomId for frontend matching
-                        clientSideId: clientSideId, // ECHO BACK FOR DEDUPLICATION
+                    const createdAtIso = messageCreatedAtToIso(savedMessage);
+                    const receivePayload = {
+                        id: savedMessage.id,
+                        chat_id: savedMessage.chat_id,
+                        roomId: roomId,
+                        sender_id: savedMessage.sender_id,
+                        content: savedMessage.content,
+                        type: savedMessage.type,
+                        metadata: savedMessage.metadata,
+                        parent_id: savedMessage.parent_id,
+                        created_at: createdAtIso,
+                        clientSideId: clientSideId,
                         sender_name: broadcastSenderName,
-                        sender_avatar: broadcastSenderAvatar
+                        sender_avatar: broadcastSenderAvatar,
+                        is_read: savedMessage.is_read,
+                    };
+                    console.log('[CHAT_FIX][backend:emit]', {
+                        id: savedMessage.id,
+                        created_at: createdAtIso,
+                        clientSideId,
                     });
+                    this.io.to(roomId).emit('receive_message', receivePayload);
                     console.log(`[Socket] Broadcasted to room: ${roomId} with clientSideId: ${clientSideId}`);
 
                     // 2.5 Cache Invalidation
@@ -1012,11 +1038,13 @@ export class SocketService {
             { senderName: 'MALI Bot' }
         );
 
-        // Emit to room (simplest approach for group chat bot)
+        const botCreatedIso = messageCreatedAtToIso(botMessage);
         this.io.to(roomId).emit('receive_message', {
             ...botMessage,
+            roomId,
+            created_at: botCreatedIso,
             sender_name: 'MALI Bot',
-            sender_avatar: null
+            sender_avatar: null,
         });
     }
 }
