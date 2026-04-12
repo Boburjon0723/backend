@@ -252,8 +252,7 @@ export const getMessages = async (req: Request, res: Response) => {
         }
         const messages = await MessageModel.findByChatId(chatId as string);
         const payload = messages.map((msg) => {
-            const row = msg as Record<string, unknown>;
-            const c = row.created_at;
+            const c = msg.created_at;
             const created_at =
                 c instanceof Date
                     ? c.toISOString()
@@ -262,7 +261,7 @@ export const getMessages = async (req: Request, res: Response) => {
                       : c != null
                         ? String(c)
                         : c;
-            return { ...row, created_at };
+            return { ...msg, created_at };
         });
         res.status(200).json(payload);
     } catch (error) {
