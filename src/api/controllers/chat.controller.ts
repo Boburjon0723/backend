@@ -251,7 +251,20 @@ export const getMessages = async (req: Request, res: Response) => {
             return res.status(200).json([]); // Return empty messages for old mongo IDs
         }
         const messages = await MessageModel.findByChatId(chatId as string);
-        res.status(200).json(messages);
+        const payload = messages.map((msg) => {
+            const row = msg as Record<string, unknown>;
+            const c = row.created_at;
+            const created_at =
+                c instanceof Date
+                    ? c.toISOString()
+                    : typeof c === 'string'
+                      ? c
+                      : c != null
+                        ? String(c)
+                        : c;
+            return { ...row, created_at };
+        });
+        res.status(200).json(payload);
     } catch (error) {
         console.error('Get Messages Error:', error);
         res.status(500).json({ message: 'Internal server error' });
