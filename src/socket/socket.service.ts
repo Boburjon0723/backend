@@ -240,7 +240,6 @@ export class SocketService {
                         },
                         parentId
                     );
-                    console.log(`[Socket] Saved message to Postgres DB:`, savedMessage.id, `Room: ${roomId}`);
 
                     let broadcastSenderName =
                         authSocket.user.name || authSocket.user.phone || 'Unknown User';
@@ -278,13 +277,7 @@ export class SocketService {
                         sender_avatar: broadcastSenderAvatar,
                         is_read: savedMessage.is_read,
                     };
-                    console.log('[CHAT_FIX][backend:emit]', {
-                        id: savedMessage.id,
-                        created_at: createdAtIso,
-                        clientSideId,
-                    });
                     this.io.to(roomId).emit('receive_message', receivePayload);
-                    console.log(`[Socket] Broadcasted to room: ${roomId} with clientSideId: ${clientSideId}`);
 
                     // 2.5 Cache Invalidation
                     try {
@@ -323,36 +316,27 @@ export class SocketService {
                             messageIds: updatedMessageIds,
                             readBy: userId
                         });
-                        console.log(`[Socket] Marked ${updatedMessageIds.length} messages as read in room ${roomId} by ${userId}`);
                     }
                 } catch (error) {
                     console.error('Mark messages read error:', error);
                 }
             });
 
-            // Calling Signaling
-            authSocket.on('call_user', (data: { targetUserId: string, signal: any, fromName: string, callType?: string }) => {
-                this.io.to(data.targetUserId).emit('incoming_call', {
-                    signal: data.signal,
-                    from: authSocket.user.id,
-                    fromName: data.fromName,
-                    callType: data.callType
-                });
+            // Chat call signaling disabled: use service panels only.
+            authSocket.on('call_user', () => {
+                authSocket.emit('error', { message: "Chat call o'chirilgan. Xizmat panelidan foydalaning." });
             });
 
-            authSocket.on('accept_call', (data: { to: string, signal: any }) => {
-                this.io.to(data.to).emit('call_accepted', {
-                    signal: data.signal,
-                    from: authSocket.user.id
-                });
+            authSocket.on('accept_call', () => {
+                /* disabled */
             });
 
-            authSocket.on('reject_call', (data: { to: string }) => {
-                this.io.to(data.to).emit('call_rejected', { from: authSocket.user.id });
+            authSocket.on('reject_call', () => {
+                /* disabled */
             });
 
-            authSocket.on('end_call', (data: { to: string }) => {
-                this.io.to(data.to).emit('call_ended', { from: authSocket.user.id });
+            authSocket.on('end_call', () => {
+                /* disabled */
             });
 
             authSocket.on('booking_accept', async (data: { studentId: string, url: string }) => {
@@ -370,11 +354,8 @@ export class SocketService {
                 }
             });
 
-            authSocket.on('call_signal', (data: { to: string, signal: any }) => {
-                this.io.to(data.to).emit('call_signal', {
-                    signal: data.signal,
-                    from: authSocket.user.id
-                });
+            authSocket.on('call_signal', () => {
+                /* disabled */
             });
 
             authSocket.on('typing', (roomId: string) => {

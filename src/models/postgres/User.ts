@@ -52,7 +52,6 @@ export interface User {
 
 export const UserModel = {
     async findByPhone(phone: string): Promise<User | null> {
-        console.log(`[DB] findByPhone: ${phone}`);
         const query = `
             SELECT u.*,
                    p.is_expert,
@@ -68,7 +67,6 @@ export const UserModel = {
         `;
         try {
             const result = await pool.query(query, [phone]);
-            console.log(`[DB] findByPhone result rows: ${result.rows.length}`);
             return result.rows[0] || null;
         } catch (err) {
             console.error(`[DB] findByPhone error:`, err);

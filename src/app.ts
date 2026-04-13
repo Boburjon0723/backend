@@ -44,11 +44,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Bot-Token']
 }));
 
-// Request Debugger
-app.use((req, res, next) => {
-    console.log(`[REQ] ${req.method} ${req.url}`);
-    next();
-});
 app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
     contentSecurityPolicy: false,
@@ -56,12 +51,11 @@ app.use(helmet({
 }));
 // Global Rate Limiting - TEMPORARILY DISABLED FOR DEBUGGING
 // app.use(globalLimiter);
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Diagnostic Route
 app.get('/api/ping', (req, res) => {
-    console.log('[PING] Diagnostic ping received');
     res.json({ status: 'ok', time: new Date().toISOString() });
 });
 

@@ -14,7 +14,6 @@ export const getUsers = async (req: Request, res: Response) => {
 export const getUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
-        console.log('[getUserById] Request for userId:', userId);
 
         // UUID validation (Relaxed)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,7 +53,6 @@ export const getUserById = async (req: Request, res: Response) => {
         const isBlocked = blockCheck.rows.length > 0;
         const blockedByMe = blockCheck.rows.some(r => r.blocker_id === currentUserId);
 
-        console.log('[getUserById] Success fetching details for:', userId);
         res.json({ ...result.rows[0], isBlocked, blockedByMe });
     } catch (e: any) {
         console.error('[getUserById] DATABASE ERROR:', e);
@@ -104,7 +102,6 @@ export const updateProfile = async (req: Request, res: Response) => {
             bio_expert, specialty_desc, expert_proposal, services_json, expert_groups, expert_fee_total,
             resume_url, anketa_url, pricing_model
         } = req.body;
-        console.log('[updateProfile] Payload:', req.body);
 
         const client = await pool.connect();
         try {
@@ -171,10 +168,8 @@ export const updateProfile = async (req: Request, res: Response) => {
                     (experience_years && parseInt(experience_years) !== parseInt(existingProfile.experience_years));
 
                 if (is_expert === true && (existingProfile.verified_status === 'none' || existingProfile.verified_status === 'rejected' || existingProfile.verified_status === 'unverified' || !existingProfile.verified_status)) {
-                    console.log(`[updateProfile] Setting expert ${userId} to pending (new, re-application, or migration)`);
                     newVerifiedStatus = 'pending';
                 } else if (existingProfile.verified_status === 'approved' && criticalFieldsChanged) {
-                    console.log(`[updateProfile] Resetting approved expert ${userId} to pending due to critical field changes`);
                     newVerifiedStatus = 'pending';
                 }
 
@@ -230,7 +225,6 @@ export const updateProfile = async (req: Request, res: Response) => {
             }
 
             await client.query('COMMIT');
-            console.log('[updateProfile] Success for user:', userId);
 
             // Broadcast profile update via Socket.IO
             const io = req.app.get('io');
@@ -379,7 +373,6 @@ export const addContact = async (req: Request, res: Response) => {
             );
         }
 
-        console.log(`[addContact] User ${userId} added ${contactUserId} with custom name: ${name} ${surname}`);
         res.status(200).json({ message: 'Kontakt muvaffaqiyatli saqlandi (Faqat sizga ko\'rinadi)' });
     } catch (err) {
         console.error('Add Contact Error:', err);
@@ -449,7 +442,6 @@ export const removeContact = async (req: Request, res: Response) => {
             if (io) {
                 io.emit('chat_deleted', { chatId, participants: [userId, contactId] });
             }
-            console.log(`[removeContact] Mutual chat ${chatId} deleted for ${userId} and ${contactId}`);
         }
 
         // 3. Delete from user_contacts for BOTH users (Mutual deletion)
@@ -459,7 +451,6 @@ export const removeContact = async (req: Request, res: Response) => {
         );
 
         await client.query('COMMIT');
-        console.log(`[removeContact] User ${userId} mutually removed contact ${contactId}`);
         res.status(200).json({ message: 'Kontakt va barcha yozishmalar ikkala tomon uchun ham o\'chirildi' });
     } catch (err) {
         await client.query('ROLLBACK');

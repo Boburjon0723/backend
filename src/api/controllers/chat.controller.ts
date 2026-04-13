@@ -117,9 +117,6 @@ export const createChat = async (req: Request, res: Response) => {
         const { participantId, type, name, participants, fromExpertListing } = req.body;
         const currentUserId = (req as any).user.id;
 
-        console.log('[createChat] Request Body:', req.body);
-        console.log('[createChat] Current User ID from token:', currentUserId);
-
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
         if (type === 'group') {
@@ -127,7 +124,6 @@ export const createChat = async (req: Request, res: Response) => {
             const avatar_url = req.body.avatar_url;
             const newGroup = await ChatModel.createGroup(currentUserId, name, participants || [], avatar_url);
             const groupId = newGroup?.id ? String(newGroup.id) : null;
-            console.log('[createChat] Guruh yaratildi, id=', groupId, 'name=', name);
             await safeDelCache(`user_chats:${currentUserId}`);
             if (participants && Array.isArray(participants)) {
                 for (const pId of participants) {
@@ -223,12 +219,10 @@ export const getUserChats = async (req: Request, res: Response) => {
         if (!skipCache) {
             const cachedChats = await safeGetCache(cacheKey);
             if (cachedChats) {
-                console.log(`[getUserChats] Cache HIT for user: ${currentUserId}`);
                 return res.status(200).json(JSON.parse(cachedChats));
             }
         }
 
-        console.log(`[getUserChats] Cache MISS or refresh. Fetching chats from DB for user: ${currentUserId}`);
         const chats = await ChatModel.findUserChats(currentUserId);
 
         const enriched = await Promise.all(chats.map((chat) => enrichPrivateChatRow(chat, currentUserId)));
@@ -288,10 +282,6 @@ export const getMessages = async (req: Request, res: Response) => {
         }
         const messages = await MessageModel.findByChatId(chatId as string);
 
-        if (process.env.NODE_ENV !== 'production') {
-            console.log('[CHAT_FIX][api]', messages.map((m) => m.created_at));
-        }
-
         const payload = messages.map((msg, index) => {
             let created_at = createdAtFromDbForJson(msg.created_at);
             if (created_at == null && msg.created_at instanceof Date) {
@@ -349,7 +339,6 @@ export const getChatDetails = async (req: Request, res: Response) => {
             console.warn('[getChatDetails] Chat topilmadi, id=', chatId);
             return res.status(404).json({ message: 'Chat not found' });
         }
-        console.log('[getChatDetails] Chat topildi, id=', chatId, 'type=', chat.type);
 
         // Get participants
         const chatsWithParticipants = await ChatModel.findUserChats(currentUserId);
@@ -639,14 +628,12 @@ export const updateGroupChat = async (req: Request, res: Response) => {
 
         if (!chatId) return res.status(400).json({ message: 'Chat ID kerak' });
 
-        console.log('[updateGroupChat] chatId=', chatId, 'userId=', currentUserId);
         const chat = await ChatModel.findById(chatId);
         if (!chat) {
             console.warn('[updateGroupChat] Chat topilmadi, id:', chatId);
             await safeDelCache(`user_chats:${currentUserId}`);
             return res.status(404).json({ message: 'Chat topilmadi', chatId });
         }
-        console.log('[updateGroupChat] Chat topildi, type=', chat.type);
         if (chat.type !== 'group') return res.status(400).json({ message: 'Faqat guruhni yangilash mumkin' });
         if (chat.creator_id !== currentUserId) {
             return res.status(403).json({ message: 'Faqat guruh yaratuvchisi nom va rasmni o\'zgartira oladi' });

@@ -7,7 +7,6 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // PostgreSQL Connection
-console.log('Database URL check:', process.env.DATABASE_URL ? 'URL exists' : 'URL MISSING');
 const isProduction = process.env.NODE_ENV === 'production';
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -21,7 +20,9 @@ const pool = new Pool({
 (async () => {
     try {
         const client = await pool.connect();
-        console.log('Successfully connected to PostgreSQL database (Test Query)');
+        if (!isProduction) {
+            console.log('Successfully connected to PostgreSQL database (Test Query)');
+        }
         client.release();
     } catch (err) {
         console.error('FAILED to connect to PostgreSQL database:', err);
