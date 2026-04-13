@@ -44,14 +44,48 @@ export const uploadMaterial = async (req: Request, res: Response): Promise<void>
         }
 
         const session = await SessionModel.findById(sessionId);
-        if (!session) {
-            res.status(404).json({ error: 'Session not found' });
-            return;
+        let canUpload = false;
+        if (session) {
+            // Classic sessions table flow
+            canUpload = session.provider_id === userId;
+        } else {
+            // Consultation / group flow: frontend may pass chat/group id as "sessionId"
+            // 1) service_sessions (expert side)
+            const ssRes = await pool.query(
+                `SELECT id FROM service_sessions
+                 WHERE chat_id = $1 AND expert_id = $2
+                 AND status IN ('initiated', 'ongoing')
+                 LIMIT 1`,
+                [sessionId, userId]
+            );
+            if (ssRes.rows.length > 0) {
+                canUpload = true;
+            }
+
+            // 2) listing deals (expert side)
+            if (!canUpload) {
+                const dealRes = await pool.query(
+                    `SELECT id FROM listing_service_deals
+                     WHERE chat_id = $1 AND expert_id = $2
+                     AND status IN ('escrow_held', 'pending_client_confirm')
+                     LIMIT 1`,
+                    [sessionId, userId]
+                );
+                if (dealRes.rows.length > 0) canUpload = true;
+            }
+
+            // 3) mentor classroom group creator
+            if (!canUpload) {
+                const chatRes = await pool.query(
+                    `SELECT id FROM chats WHERE id = $1 AND type = 'group' AND creator_id = $2 LIMIT 1`,
+                    [sessionId, userId]
+                );
+                if (chatRes.rows.length > 0) canUpload = true;
+            }
         }
 
-        // Only provider (mentor/teacher) can upload to session
-        if (session.provider_id !== userId) {
-            res.status(403).json({ error: 'Only the session provider can upload materials' });
+        if (!canUpload) {
+            res.status(403).json({ error: 'Only specialist/mentor can upload materials for this session' });
             return;
         }
 
