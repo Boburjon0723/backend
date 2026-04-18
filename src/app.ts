@@ -38,7 +38,10 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '32mb' }));
 app.use(express.urlencoded({ extended: true, limit: '32mb' }));
 app.use(cors({
-    origin: true, // Reflect request origin
+    origin: (origin, callback) => {
+        // Allow all origins for now to fix CORS issues, especially from Vercel deployments
+        callback(null, true);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Bot-Token']
