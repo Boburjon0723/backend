@@ -6,7 +6,8 @@ import { ServiceModel } from '../models/postgres/Service';
 import { UserModel } from '../models/postgres/User';
 import { pool } from '../config/database';
 import { NotificationService } from '../services/notification.service';
-import { safeDelCache } from '../config/redis';
+import { safeDelCache, addUserToOnline, removeUserFromOnline } from '../config/redis';
+
 
 async function getJoinerProfileForSession(userId: string | undefined) {
     if (!userId) return null;
@@ -91,8 +92,7 @@ interface AuthenticatedSocket extends Socket {
 
 export class SocketService {
     private io: Server;
-    // Map<userId, Set<socketId>> to handle multiple devices
-    private onlineUsers: Map<string, Set<string>> = new Map();
+
 
     constructor(io: Server) {
         this.io = io;
@@ -126,15 +126,12 @@ export class SocketService {
 
             console.log(`User connected: ${userId}`);
 
-            // Track Online Status
+            // Track Online Status in Redis
             if (userId) {
-                if (!this.onlineUsers.has(userId)) {
-                    this.onlineUsers.set(userId, new Set());
-                }
-                this.onlineUsers.get(userId)?.add(socket.id);
-
-                // Broadcast 'user_online' to everyone (or just friends in future)
-                this.io.emit('user_status_change', { userId, status: 'online' });
+                addUserToOnline(userId, socket.id).then(() => {
+                    // Broadcast 'user_online'
+                    this.io.emit('user_status_change', { userId, status: 'online' });
+                });
             }
 
             // Join personal room for private messages
@@ -934,20 +931,17 @@ export class SocketService {
                 const userId = authSocket.user?.id;
                 console.log(`User disconnected: ${userId}`);
 
-                if (userId && this.onlineUsers.has(userId)) {
-                    const userSockets = this.onlineUsers.get(userId);
-                    userSockets?.delete(socket.id);
-
-                    if (userSockets?.size === 0) {
-                        this.onlineUsers.delete(userId);
-                        // Broadcast 'user_status_change'
-                        this.io.emit('user_status_change', { userId, status: 'offline', lastSeen: new Date() });
-
-                        // Also notify any rooms the user might have been in for Live Sessions
-                        // For simplicity, we can't easily track which 'sessions' they were in without a more complex Map,
-                        // but usually the frontend 'onUnmount' handles this. 
-                        // However, we can use socket rooms to find where they were.
-                    }
+                if (userId) {
+                    removeUserFromOnline(userId).then((remainingSockets) => {
+                        if (remainingSockets <= 0) {
+                            // Truly offline: Broadcast change
+                            this.io.emit('user_status_change', { 
+                                userId, 
+                                status: 'offline', 
+                                lastSeen: new Date() 
+                            });
+                        }
+                    });
                 }
             });
 

@@ -8,6 +8,9 @@ import { pool } from './config/database';
 import { globalLimiter } from './middleware/rateLimit.middleware';
 import { TokenService } from './services/token.service';
 
+import { createAdapter } from '@socket.io/redis-adapter';
+import { redisClient, subClient } from './config/redis';
+
 dotenv.config();
 
 const PORT = process.env.PORT || 4000;
@@ -29,6 +32,12 @@ const io = new Server(server, {
     pingTimeout: 60000,
     pingInterval: 25000,
 });
+
+// Use Redis Adapter if clients are available
+if (redisClient && subClient) {
+    io.adapter(createAdapter(redisClient, subClient));
+    console.log('Socket.io Redis adapter initialized.');
+}
 
 // Attach io to app for access in controllers
 app.set('io', io);

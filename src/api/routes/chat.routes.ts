@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createChat, getUserChats, getMessages, getChatDetails, getRoomSubscriptionInfo, addParticipant, joinGroupWithSubscription, leaveGroup, updateGroupChat, getExpertGroups, getCommunities, joinCommunity, searchMessages, clearMessages, deleteChatEndpoint, deleteMessagesBulk, markAsRead } from '../controllers/chat.controller';
+import { createChat, getUserChats, getMessages, sendChatMessage, getChatDetails, getRoomSubscriptionInfo, addParticipant, joinGroupWithSubscription, leaveGroup, updateGroupChat, getExpertGroups, getCommunities, joinCommunity, searchMessages, clearMessages, deleteChatEndpoint, deleteMessagesBulk, markAsRead } from '../controllers/chat.controller';
 import { authenticateToken } from '../../middleware/auth.middleware';
 
 const router = Router();
@@ -12,6 +12,7 @@ router.get('/communities', getCommunities);
 router.post('/communities/:chatId/join', joinCommunity);
 router.get('/expert/:expertId', getExpertGroups); // Get expert's group chats
 router.get('/:chatId/messages', getMessages);
+router.post('/:chatId/messages', sendChatMessage);
 router.delete('/:chatId/messages', clearMessages);
 router.delete('/:chatId/messages/bulk', deleteMessagesBulk);
 router.post('/:chatId/read', markAsRead);

@@ -304,6 +304,100 @@ export const getMessages = async (req: Request, res: Response) => {
     }
 };
 
+/** Mobil / REST: matn xabar (socket bilan bir xil tekshiruvlar) */
+export const sendChatMessage = async (req: Request, res: Response) => {
+    try {
+        const rawId = req.params.chatId;
+        const chatId = typeof rawId === 'string' ? rawId : rawId?.[0] ?? '';
+        const currentUserId = (req as any).user.id as string;
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!chatId || !uuidRegex.test(chatId)) {
+            return res.status(400).json({ message: "Noto'g'ri chat ID" });
+        }
+
+        const { content, type } = req.body || {};
+        if (!content || typeof content !== 'string' || !String(content).trim()) {
+            return res.status(400).json({ message: 'Xabar matni kerak' });
+        }
+
+        const memberCheck = await pool.query(
+            `SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2`,
+            [chatId, currentUserId]
+        );
+        if (memberCheck.rowCount === 0) {
+            return res.status(403).json({ message: "Bu chatga kirmagansiz" });
+        }
+
+        const chatRow = (await pool.query(`SELECT type, creator_id FROM chats WHERE id = $1`, [chatId])).rows[0];
+        if (!chatRow) {
+            return res.status(404).json({ message: 'Chat topilmadi' });
+        }
+
+        if (chatRow.type === 'channel' && String(chatRow.creator_id) !== String(currentUserId)) {
+            return res.status(403).json({ message: "Faqat kanal yaratuvchisi xabar qo'yishi mumkin" });
+        }
+
+        if (chatRow.type === 'private') {
+            const participants = await pool.query(`SELECT user_id FROM chat_participants WHERE chat_id = $1`, [chatId]);
+            const otherParticipant = participants.rows.find((p: { user_id: string }) => String(p.user_id) !== String(currentUserId));
+            if (otherParticipant) {
+                const isBlocked = await UserModel.isBlocked(currentUserId, otherParticipant.user_id);
+                if (isBlocked) {
+                    return res.status(403).json({ message: 'Xabar yuborish imkonsiz: bloklangan' });
+                }
+            }
+        }
+
+        const savedMessage = await MessageModel.create(
+            chatId,
+            currentUserId,
+            String(content).trim(),
+            (type && typeof type === 'string' ? type : 'text') as string,
+            {},
+            null
+        );
+
+        try {
+            const participantsRes = await pool.query('SELECT user_id FROM chat_participants WHERE chat_id = $1', [chatId]);
+            for (const row of participantsRes.rows) {
+                await safeDelCache(`user_chats:${row.user_id}`);
+            }
+        } catch (e) {
+            console.error('[sendChatMessage] cache:', e);
+        }
+
+        let created_at = createdAtFromDbForJson(savedMessage.created_at);
+        if (created_at == null && savedMessage.created_at instanceof Date) {
+            const ms = savedMessage.created_at.getTime();
+            created_at = Number.isNaN(ms) ? null : savedMessage.created_at.toISOString();
+        }
+        if (created_at == null) {
+            created_at = stableIsoWhenCreatedAtNull(String(savedMessage.id), 0);
+        }
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to(chatId).emit('receive_message', {
+                id: savedMessage.id,
+                chat_id: savedMessage.chat_id,
+                roomId: chatId,
+                sender_id: savedMessage.sender_id,
+                content: savedMessage.content,
+                type: savedMessage.type,
+                metadata: savedMessage.metadata,
+                parent_id: savedMessage.parent_id,
+                created_at,
+                is_read: savedMessage.is_read,
+            });
+        }
+
+        res.status(201).json({ ...savedMessage, created_at });
+    } catch (error) {
+        console.error('Send Chat Message Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 /** Obuna tekshiruvi uchun: guruh (room) yaratuvchisi — ustoz. A'zolik tekshirilmaydi. */
 export const getRoomSubscriptionInfo = async (req: Request, res: Response) => {
     try {
