@@ -8,7 +8,7 @@ import { TokenService } from './services/token.service';
 
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redisClient, subClient } from './config/redis';
-import { setupSwagger } from './config/swagger';
+
 
 
 const PORT = process.env.PORT || 4000;
@@ -58,8 +58,6 @@ app.set('io', io);
 
 new SocketService(io);
 
-// Setup Swagger Documentation (before starting server)
-setupSwagger(app);
 
 
 const runAutoMigration = async () => {

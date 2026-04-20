@@ -29,6 +29,8 @@ import reviewRoutes from './api/routes/review.routes';
 import desktopRoutes from './api/routes/desktop.routes';
 import botRoutes from './api/routes/bot.routes';
 import botApiRoutes from './api/routes/botApi.routes';
+import { setupSwagger } from './config/swagger';
+
 
 const app = express();
 
@@ -86,6 +88,10 @@ app.use(helmet({
 app.use(globalLimiter);
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Swagger Documentation
+setupSwagger(app);
+
 
 // Diagnostic Route
 app.get('/api/ping', (req, res) => {
