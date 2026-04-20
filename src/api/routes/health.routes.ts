@@ -4,7 +4,35 @@ import { redisClient, getOnlineUserCount } from '../../config/redis';
 
 const router = Router();
 
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: Get system health status
+ *     tags: [System]
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 uptime:
+ *                   type: number
+ *                 message:
+ *                   type: string
+ *                 timestamp:
+ *                   type: number
+ *                 postgres:
+ *                   type: string
+ *                 redis:
+ *                   type: string
+ *                 onlineUsers:
+ *                   type: number
+ */
 router.get('/health', async (req: Request, res: Response) => {
+
     const healthcheck = {
         uptime: process.uptime(),
         message: 'OK',

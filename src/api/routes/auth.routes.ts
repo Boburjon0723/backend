@@ -17,7 +17,34 @@ import { authenticateToken } from '../../middleware/auth.middleware';
 const router = Router();
 
 router.post('/auth/register', authLimiter, register);
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Login a user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phone
+ *               - password
+ *             properties:
+ *               phone:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       401:
+ *         description: Invalid credentials
+ */
 router.post('/auth/login', authLimiter, login);
+
 router.post('/auth/refresh', refresh);
 
 // Authenticated user asks for one-time Telegram link code
