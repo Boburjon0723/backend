@@ -101,3 +101,31 @@ export const isUserOnline = async (userId: string): Promise<boolean> => {
     }
 };
 
+/**
+ * Clear cache by pattern (e.g. 'cache:*')
+ */
+export const safeClearCache = async (pattern: string): Promise<void> => {
+    if (!redisClient || !redisClient.isOpen) return;
+    try {
+        const keys = await redisClient.keys(pattern);
+        if (keys.length > 0) {
+            await redisClient.del(keys);
+            console.log(`Cleared ${keys.length} keys with pattern ${pattern}`);
+        }
+    } catch (e) {
+        console.warn(`Redis clear pattern error for ${pattern}:`, e);
+    }
+};
+
+/**
+ * Get count of online users
+ */
+export const getOnlineUserCount = async (): Promise<number> => {
+    if (!redisClient || !redisClient.isOpen) return 0;
+    try {
+        return await redisClient.hLen(ONLINE_USERS_KEY);
+    } catch (e) {
+        return 0;
+    }
+};
+

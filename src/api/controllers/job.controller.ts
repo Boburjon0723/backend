@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { JobModel } from '../../models/postgres/Job';
 import { JobCategoryModel } from '../../models/postgres/JobCategory';
 import { pool } from '../../config/database';
+import { safeClearCache } from '../../config/redis';
 
 export class JobController {
     private jobModel: JobModel;
@@ -61,6 +62,10 @@ export class JobController {
             }, client);
 
             await client.query('COMMIT');
+            
+            // Invalidate cache
+            safeClearCache('cache:/api/jobs*').catch(e => console.warn('Cache clear error:', e));
+
             res.status(201).json(job);
         } catch (error: any) {
             await client.query('ROLLBACK');
@@ -100,6 +105,10 @@ export class JobController {
         try {
             const { name_uz, name_ru, icon, publication_price_mali } = req.body;
             const category = await this.categoryModel.create({ name_uz, name_ru, icon, publication_price_mali });
+            
+            // Invalidate categories cache
+            safeClearCache('cache:/api/jobs/categories*').catch(e => console.warn('Cache clear error:', e));
+            
             res.status(201).json(category);
         } catch (error) {
             console.error('Create Category Error:', error);

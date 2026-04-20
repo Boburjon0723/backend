@@ -59,8 +59,12 @@ app.use(cors({
         // Non-browser clients (no Origin header) are allowed.
         if (!origin) return callback(null, true);
         if (isOriginAllowed(origin)) return callback(null, true);
+        
+        console.warn(`[CORS REJECTED] Origin: "${origin}" is not in the allowed list:`, httpCorsOrigins);
+        
         return callback(new Error('CORS origin is not allowed'));
     },
+
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Bot-Token']
