@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { globalLimiter } from './middleware/rateLimit.middleware';
 import healthRoutes from './api/routes/health.routes';
 import authRoutes from './api/routes/auth.routes';
 import tokenRoutes from './api/routes/token.routes';
@@ -31,6 +32,22 @@ import botApiRoutes from './api/routes/botApi.routes';
 
 const app = express();
 
+const parseOriginList = (raw: string | undefined): string[] =>
+    String(raw || '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+
+const httpCorsOrigins = parseOriginList(process.env.CORS_ORIGINS);
+
+const isOriginAllowed = (origin: string): boolean => {
+    if (httpCorsOrigins.length === 0) {
+        // In dev/test we allow browser origins by default for easier local setup.
+        return process.env.NODE_ENV !== 'production';
+    }
+    return httpCorsOrigins.includes(origin);
+};
+
 // Behind Railway / reverse proxy: trust X-Forwarded-* headers
 app.set('trust proxy', 1);
 
@@ -39,8 +56,10 @@ app.use(express.json({ limit: '32mb' }));
 app.use(express.urlencoded({ extended: true, limit: '32mb' }));
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow all origins for now to fix CORS issues, especially from Vercel deployments
-        callback(null, true);
+        // Non-browser clients (no Origin header) are allowed.
+        if (!origin) return callback(null, true);
+        if (isOriginAllowed(origin)) return callback(null, true);
+        return callback(new Error('CORS origin is not allowed'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -52,8 +71,7 @@ app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
 }));
-// Global Rate Limiting - TEMPORARILY DISABLED FOR DEBUGGING
-// app.use(globalLimiter);
+app.use(globalLimiter);
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 

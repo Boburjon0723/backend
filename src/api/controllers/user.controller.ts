@@ -3,7 +3,12 @@ import { pool } from '../../config/database';
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
-        const result = await pool.query('SELECT id, name, surname, username, phone, avatar_url FROM users LIMIT 50');
+        const currentUser = (req as any).user || {};
+        const isAdmin = currentUser?.role === 'admin';
+        const selectFields = isAdmin
+            ? 'id, name, surname, username, phone, avatar_url'
+            : 'id, name, surname, username, avatar_url';
+        const result = await pool.query(`SELECT ${selectFields} FROM users LIMIT 50`);
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Get Users Error:', error);
@@ -56,7 +61,7 @@ export const getUserById = async (req: Request, res: Response) => {
         res.json({ ...result.rows[0], isBlocked, blockedByMe });
     } catch (e: any) {
         console.error('[getUserById] DATABASE ERROR:', e);
-        res.status(500).json({ message: 'Server error', details: e.message });
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
@@ -265,7 +270,8 @@ export const searchUsers = async (req: Request, res: Response) => {
                    p.service_price, p.hourly_rate, p.pricing_model, p.currency, p.languages,
                    p.verified_status, p.specialization_details, p.bio_expert,
                    p.specialty_desc, p.expert_proposal, p.service_languages, p.service_format,
-                   p.institution, p.current_workplace, p.expert_groups, p.wiloyat
+                   p.institution, p.current_workplace, p.expert_groups, p.wiloyat,
+                   p.rating AS expert_rating
             FROM users u
             LEFT JOIN user_profiles p ON u.id = p.user_id
             WHERE 1=1

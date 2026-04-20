@@ -137,9 +137,39 @@ export class SocketService {
             // Join personal room for private messages
             authSocket.join(authSocket.user.id);
 
-            authSocket.on('join_room', (roomId: string) => {
-                authSocket.join(roomId);
-                console.log(`[Socket] User ${authSocket.user.id} joined room ${roomId}`);
+            authSocket.on('join_room', async (roomId: string) => {
+                try {
+                    const normalizedRoomId = String(roomId || '').trim();
+                    if (!normalizedRoomId) return;
+
+                    // Always allow the personal room used for direct user-targeted events.
+                    if (normalizedRoomId === String(authSocket.user.id)) {
+                        authSocket.join(normalizedRoomId);
+                        return;
+                    }
+
+                    // Chat rooms are UUIDs; user must be a participant to join.
+                    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (!uuidRegex.test(normalizedRoomId)) {
+                        authSocket.emit('error', { message: 'Ruxsatsiz xona' });
+                        return;
+                    }
+
+                    const participant = await pool.query(
+                        `SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2 LIMIT 1`,
+                        [normalizedRoomId, authSocket.user.id]
+                    );
+                    if (participant.rows.length === 0) {
+                        authSocket.emit('error', { message: 'Bu xonaga kirish huquqi yo‘q' });
+                        return;
+                    }
+
+                    authSocket.join(normalizedRoomId);
+                    console.log(`[Socket] User ${authSocket.user.id} joined room ${normalizedRoomId}`);
+                } catch (e) {
+                    console.warn('[Socket] join_room authorization error:', e);
+                    authSocket.emit('error', { message: 'Xonaga ulanishda xatolik' });
+                }
             });
 
             authSocket.on('session_join', async (data: { sessionId: string }) => {
@@ -319,25 +349,31 @@ export class SocketService {
                 }
             });
 
-            // Chat call signaling disabled: use service panels only.
-            authSocket.on('call_user', () => {
-                authSocket.emit('error', { message: "Chat call o'chirilgan. Xizmat panelidan foydalaning." });
+            // WebRTC & LiveKit Call Signaling
+            authSocket.on('call_user', (data: { targetUserId: string; fromName: string; signal: any; callType: string }) => {
+                this.io.to(data.targetUserId).emit('incoming_call', { 
+                    from: authSocket.user.id, 
+                    name: data.fromName || authSocket.user.name || authSocket.user.phone || 'User',
+                    signal: data.signal,
+                    callType: data.callType
+                });
             });
 
-            authSocket.on('accept_call', () => {
-                /* disabled */
+            authSocket.on('accept_call', (data: { to: string; signal: any }) => {
+                this.io.to(data.to).emit('call_accepted', { signal: data.signal });
             });
 
-            authSocket.on('reject_call', () => {
-                /* disabled */
+            authSocket.on('reject_call', (data: { to: string }) => {
+                this.io.to(data.to).emit('call_rejected');
             });
 
-            authSocket.on('end_call', () => {
-                /* disabled */
+            authSocket.on('end_call', (data: { to: string }) => {
+                this.io.to(data.to).emit('call_ended');
             });
 
             authSocket.on('booking_accept', async (data: { studentId: string, url: string }) => {
                 try {
+                    const { NotificationService } = await import('../services/notification.service');
                     await NotificationService.createNotification(
                         data.studentId,
                         'booking_accepted',
@@ -351,8 +387,8 @@ export class SocketService {
                 }
             });
 
-            authSocket.on('call_signal', () => {
-                /* disabled */
+            authSocket.on('call_signal', (data: { to: string; signal: any }) => {
+                this.io.to(data.to).emit('call_signal', { signal: data.signal, from: authSocket.user.id });
             });
 
             authSocket.on('typing', (roomId: string) => {
@@ -389,15 +425,6 @@ export class SocketService {
                     console.error('Session chat error:', error);
                     authSocket.emit('error', { message: 'Failed to send session chat' });
                 }
-            });
-
-            // Whiteboard Sync System
-            authSocket.on('whiteboard:draw', (data: { sessionId: string, x: number, y: number, color: string, lineWidth: number, type: string }) => {
-                authSocket.to(data.sessionId).emit('whiteboard:draw', data);
-            });
-
-            authSocket.on('whiteboard:clear', (data: { sessionId: string }) => {
-                authSocket.to(data.sessionId).emit('whiteboard:clear', data);
             });
 
             // Lesson Start Event (Mentor clicks 'Boshlash')
@@ -496,9 +523,10 @@ export class SocketService {
                     chatId: string;
                     expertName: string;
                     sessionStyle?: 'mentor' | 'consult' | 'legal' | 'psychology';
+                    isPaymentRequest?: boolean;
                 }) => {
                     try {
-                        const { chatId, expertName, sessionStyle } = data;
+                        const { chatId, expertName, sessionStyle, isPaymentRequest } = data;
                         const userId = authSocket.user.id;
                         if (!chatId || !expertName) return;
 
@@ -526,7 +554,14 @@ export class SocketService {
                                   : sessionStyle === 'psychology'
                                     ? 'psychology'
                                     : 'consult';
+                        
                         let content = consultPanelInviteChatContent(expertName, style);
+                        let kind: string = 'panel_open';
+
+                        if (isPaymentRequest) {
+                            content = `💳 **${expertName}** bilan sessiyani boshlash uchun xizmat haqqini to'lashingiz lozim. To'lovdan so'ng sessiyaga ulanish tugmasi faollashadi.`;
+                            kind = 'payment_request';
+                        }
 
                         let serviceAmountMali: number | null = null;
                         if (style !== 'mentor') {
@@ -558,7 +593,7 @@ export class SocketService {
                         const meta = {
                             sessionId: chatId,
                             sessionStyle: style,
-                            kind: 'panel_open',
+                            kind,
                             ...(serviceAmountMali != null ? { serviceAmountMali } : {}),
                         };
                         const mentor = await UserModel.findById(userId);
@@ -718,15 +753,17 @@ export class SocketService {
                 this.io.to(data.sessionId).emit('material_new', data.material);
             });
 
-            // Interactive Whiteboard System - Broadcast to ALL participants
-            authSocket.on('whiteboard:draw', (data: any) => {
-                // Use this.io instead of authSocket.to to include everyone in the room
-                this.io.to(data.sessionId).emit('whiteboard:draw', data);
+            /** Doska: bitta handler; `socket.to(room)` — yuboruvchidan boshqa xonadagilarga (chiziq takrorlanmasin). sessionId trim. */
+            authSocket.on('whiteboard:draw', (data: { sessionId?: string } & Record<string, unknown>) => {
+                const sid = data?.sessionId != null ? String(data.sessionId).trim() : '';
+                if (!sid) return;
+                authSocket.to(sid).emit('whiteboard:draw', data);
             });
 
-            authSocket.on('whiteboard:clear', (data: { sessionId: string }) => {
-                // Broadcast clear to everyone
-                this.io.to(data.sessionId).emit('whiteboard:clear', data);
+            authSocket.on('whiteboard:clear', (data: { sessionId?: string }) => {
+                const sid = data?.sessionId != null ? String(data.sessionId).trim() : '';
+                if (!sid) return;
+                authSocket.to(sid).emit('whiteboard:clear', data);
             });
 
             authSocket.on('whiteboard:toggle', (data: { sessionId: string, isOpen: boolean }) => {
@@ -946,8 +983,14 @@ export class SocketService {
             });
 
             // Kick Student from Session
-            authSocket.on('kick_student', (data: { sessionId: string, studentId: string }) => {
+            authSocket.on('kick_student', async (data: { sessionId: string, studentId: string }) => {
                 const { sessionId, studentId } = data;
+                if (!sessionId || !studentId) return;
+                const canControl = await verifyUserCanControlSession(String(sessionId), String(authSocket.user.id));
+                if (!canControl) {
+                    authSocket.emit('error', { message: 'Bu amal uchun ruxsat yo‘q' });
+                    return;
+                }
                 console.log(`[Socket] Mentor ${authSocket.user.id} kicking student ${studentId} from session ${sessionId}`);
 
                 // 1. Emit to the specific student so their UI can react

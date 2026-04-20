@@ -4,6 +4,16 @@ import dotenv from 'dotenv';
 import { pool } from '../../config/database';
 dotenv.config();
 
+const getLivekitConfig = () => {
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    const wsUrl = process.env.LIVEKIT_URL;
+    if (!apiKey || !apiSecret || !wsUrl) {
+        throw new Error('LiveKit environment variables are not fully configured');
+    }
+    return { apiKey, apiSecret, wsUrl };
+};
+
 const createToken = async (req: Request, res: Response): Promise<void> => {
     try {
         const { room } = req.query;
@@ -51,8 +61,7 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
             }
         }
 
-        const apiKey = process.env.LIVEKIT_API_KEY || 'devkey';
-        const apiSecret = process.env.LIVEKIT_API_SECRET || 'secret';
+        const { apiKey, apiSecret, wsUrl } = getLivekitConfig();
 
         const fullName = user?.name ? `${user.name}${user.surname ? ' ' + user.surname : ''}` : null;
         const participantName = fullName || user?.username || `User-${user?.id.substring(0, 4)}`;
@@ -81,8 +90,6 @@ const createToken = async (req: Request, res: Response): Promise<void> => {
         });
 
         const token = await at.toJwt();
-        const wsUrl = process.env.LIVEKIT_URL || 'ws://localhost:7880';
-
         // Notify group members about session activity via Socket.IO
         const io = req.app.get('io');
         if (io && room && isMentor) {

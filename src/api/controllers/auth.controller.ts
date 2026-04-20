@@ -4,9 +4,23 @@ import jwt from 'jsonwebtoken';
 import { pool } from '../../config/database';
 import { UserModel } from '../../models/postgres/User';
 
+const getJwtSecrets = () => {
+    const accessTokenSecret = process.env.JWT_SECRET;
+    const refreshTokenSecret = process.env.JWT_REFRESH_SECRET;
+    if (!accessTokenSecret || !refreshTokenSecret) {
+        throw new Error('JWT secrets are not configured');
+    }
+    if (
+        process.env.NODE_ENV === 'production' &&
+        (accessTokenSecret.length < 32 || refreshTokenSecret.length < 32)
+    ) {
+        throw new Error('JWT secrets are too short for production');
+    }
+    return { accessTokenSecret, refreshTokenSecret };
+};
+
 const generateTokens = async (userId: string, phone: string, role: string, isExpert: boolean = false, name: string = '', surname: string = '') => {
-    const accessTokenSecret = process.env.JWT_SECRET || 'secret';
-    const refreshTokenSecret = process.env.JWT_REFRESH_SECRET || 'refresh_secret';
+    const { accessTokenSecret, refreshTokenSecret } = getJwtSecrets();
 
     const accessToken = jwt.sign(
         { id: userId, phone, role, isExpert, name, surname },
@@ -561,7 +575,7 @@ export const refresh = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Refresh token is required' });
         }
 
-        const refreshTokenSecret = process.env.JWT_REFRESH_SECRET || 'refresh_secret';
+        const { refreshTokenSecret } = getJwtSecrets();
 
         let decoded: any;
         try {

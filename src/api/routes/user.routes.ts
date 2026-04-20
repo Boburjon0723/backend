@@ -8,7 +8,7 @@ import { authenticateToken } from '../../middleware/auth.middleware';
 
 const router = Router();
 
-router.get('/', getUsers);
+router.get('/', authenticateToken, getUsers);
 router.get('/me', authenticateToken, getProfile);
 router.put('/me', authenticateToken, updateProfile);
 router.get('/search', authenticateToken, searchUsers);
