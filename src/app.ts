@@ -45,8 +45,16 @@ const isOriginAllowed = (origin: string): boolean => {
         // In dev/test we allow browser origins by default for easier local setup.
         return process.env.NODE_ENV !== 'production';
     }
-    return httpCorsOrigins.includes(origin);
+    
+    // Direct match
+    if (httpCorsOrigins.includes(origin)) return true;
+    
+    // Allow any Vercel deployment (previews, branches, etc.)
+    if (origin.endsWith('.vercel.app')) return true;
+    
+    return false;
 };
+
 
 // Behind Railway / reverse proxy: trust X-Forwarded-* headers
 app.set('trust proxy', 1);
